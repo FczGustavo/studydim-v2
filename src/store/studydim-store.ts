@@ -27,6 +27,8 @@ const LONG_BREAK_DURATION = 15 * 60;
 const LONG_BREAK_EVERY = 4;
 const RECALL_INTERVALS = [7, 14, 30] as const;
 
+const toDateKey = (date: Date): string => date.toISOString().slice(0, 10);
+
 const DEFAULT_TIMER_DURATIONS = {
   focus: FOCUS_DURATION,
   shortBreak: SHORT_BREAK_DURATION,
@@ -63,6 +65,7 @@ interface StudydimState {
   customMotivationalPhrase: string;
   dailyRatings: Record<string, number>;
   dailyNotes: Record<string, string>;
+  lastTaskRolloverDate: string;
 
   tasks: Task[];
   studyLogs: StudyLog[];
@@ -93,6 +96,8 @@ interface StudydimState {
 
   addTask: (title: string, priority: Task["priority"]) => void;
   toggleTask: (taskId: string) => void;
+  removeTask: (taskId: string) => void;
+  rolloverTasksForDate: (dateKey: string) => void;
 
   setTrack: (youtubeId: string) => void;
   setCustomSoundUrl: (url: string) => void;
@@ -117,6 +122,7 @@ export const useStudydimStore = create<StudydimState>()(
       customMotivationalPhrase: "",
       dailyRatings: {},
       dailyNotes: {},
+      lastTaskRolloverDate: toDateKey(new Date()),
 
       tasks: initialTasks,
       studyLogs: initialStudyLogs,
@@ -285,6 +291,21 @@ export const useStudydimStore = create<StudydimState>()(
           ),
         })),
 
+      removeTask: (taskId) =>
+        set((state) => ({
+          tasks: state.tasks.filter((task) => task.id !== taskId),
+        })),
+
+      rolloverTasksForDate: (dateKey) =>
+        set((state) => {
+          if (state.lastTaskRolloverDate === dateKey) return state;
+
+          return {
+            tasks: state.tasks.filter((task) => !task.completed),
+            lastTaskRolloverDate: dateKey,
+          };
+        }),
+
       setTrack: (youtubeId) => set({ currentTrackId: youtubeId }),
 
       setCustomSoundUrl: (url) => set({ customSoundUrl: url.trim() }),
@@ -395,6 +416,7 @@ export const useStudydimStore = create<StudydimState>()(
         customMotivationalPhrase: state.customMotivationalPhrase,
         dailyRatings: state.dailyRatings,
         dailyNotes: state.dailyNotes,
+        lastTaskRolloverDate: state.lastTaskRolloverDate,
         tasks: state.tasks,
         studyLogs: state.studyLogs,
         topics: state.topics,

@@ -24,6 +24,14 @@ function fromDateKey(dateKey: string): Date {
   return new Date(`${dateKey}T12:00:00`);
 }
 
+function normalizeHeatIntensity(minutes: number): number {
+  if (minutes <= 0) return 0;
+  const minMinutes = 60;
+  const maxMinutes = 15 * 60;
+  const clamped = Math.min(Math.max(minutes, minMinutes), maxMinutes);
+  return (clamped - minMinutes) / (maxMinutes - minMinutes);
+}
+
 function normalizeEmbedUrl(rawUrl: string): { type: "audio" | "iframe"; src: string } | null {
   const url = rawUrl.trim();
   if (!url) return null;
@@ -133,7 +141,7 @@ function Heatmap2D({ studyLogs, todayKey }: { studyLogs: { date: string; minutes
       const dayIndex = date.getDay();
       const inYear = date.getFullYear() === year;
       const minutes = inYear ? logMap.get(dateKey) ?? 0 : 0;
-      const intensity = Math.min(minutes / 120, 1);
+      const intensity = normalizeHeatIntensity(minutes);
       cells.push({ date, dateKey, x: weekIndex * STEP, y: dayIndex * STEP, inYear, minutes, intensity });
     }
 
@@ -171,11 +179,12 @@ function Heatmap2D({ studyLogs, todayKey }: { studyLogs: { date: string; minutes
 
         <g transform={`translate(${DAY_LABEL_W}, ${MONTH_LABEL_H})`}>
           {data.cells.map((cell) => {
+            const hasStudy = cell.minutes > 0;
             const fill = !cell.inYear
               ? "rgba(255,255,255,0.015)"
-              : cell.intensity < 0.01
+              : !hasStudy
                 ? "rgba(255,255,255,0.04)"
-                : `rgba(${Math.round(130 + 100 * cell.intensity)},${Math.round(22 + 24 * cell.intensity)},${Math.round(22 + 24 * cell.intensity)},${0.28 + cell.intensity * 0.68})`;
+                : `rgba(${Math.round(150 + 85 * cell.intensity)},${Math.round(35 + 30 * cell.intensity)},${Math.round(35 + 30 * cell.intensity)},${0.2 + cell.intensity * 0.75})`;
 
             return (
               <rect
@@ -240,7 +249,6 @@ function Heatmap3D({ studyLogs }: { studyLogs: { date: string; minutes: number }
     });
 
     const grid: Array<{ row: number; col: number; minutes: number }> = [];
-    let maxMins = 1;
 
     for (let col = 0; col < COLS; col++) {
       for (let row = 0; row < ROWS; row++) {
@@ -249,7 +257,6 @@ function Heatmap3D({ studyLogs }: { studyLogs: { date: string; minutes: number }
         const key = toDateKey(date);
         const minutes = logMap.get(key) ?? 0;
         grid.push({ row, col, minutes });
-        maxMins = Math.max(maxMins, minutes);
       }
     }
 
@@ -283,7 +290,6 @@ function Heatmap3D({ studyLogs }: { studyLogs: { date: string; minutes: number }
 
     return {
       grid: [...grid].sort((a, b) => a.col + a.row - (b.col + b.row) || a.col - b.col),
-      maxMins,
       monthLabels,
       dayLabels,
     };
@@ -294,8 +300,8 @@ function Heatmap3D({ studyLogs }: { studyLogs: { date: string; minutes: number }
   return (
     <svg viewBox={`0 0 ${SVG_W} ${SVG_H}`} className="w-full max-w-[880px] h-auto mx-auto" preserveAspectRatio="xMidYMid meet" aria-label="Heatmap 3D">
       {data.grid.map((block) => {
-        const intensity = block.minutes / data.maxMins;
-        const h = intensity * MAX_H;
+        const intensity = normalizeHeatIntensity(block.minutes);
+        const h = block.minutes > 0 ? Math.max(2, intensity * MAX_H) : 0;
         const bx = CX + (block.col - block.row) * (TW / 2);
         const by = CY + (block.col + block.row) * TH;
 
@@ -449,6 +455,8 @@ export default function Home() {
     tick,
     addTask,
     toggleTask,
+    removeTask,
+    rolloverTasksForDate,
     setTrack,
     setCustomSoundUrl,
     resetAnalytics,
@@ -482,6 +490,10 @@ export default function Home() {
     const id = window.setTimeout(() => setTodayKey(toDateKey(new Date())), ms);
     return () => window.clearTimeout(id);
   }, [todayKey]);
+
+  useEffect(() => {
+    rolloverTasksForDate(todayKey);
+  }, [todayKey, rolloverTasksForDate]);
 
   const previousSwitchRef = useRef(modeSwitchedAt);
 
@@ -640,10 +652,15 @@ export default function Home() {
               <h3 className="text-sm font-semibold" style={{ color: "rgba(255,255,255,0.65)" }}>Tarefas</h3>
               <div className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_100px_90px]">
                 <input value={taskInput} onChange={(e) => setTaskInput(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") { addTask(taskInput, priorityInput); setTaskInput(""); } }} placeholder="Nova tarefa..." className="rounded-2xl px-4 py-2.5 text-sm text-white outline-none placeholder:text-white/20" style={glassGhost} />
-                <select value={priorityInput} onChange={(e) => setPriorityInput(e.target.value as "high" | "medium" | "low")} className="rounded-2xl px-3 py-2.5 text-sm outline-none cursor-pointer" style={{ ...glassGhost, color: "rgba(255,255,255,0.55)" }}>
-                  <option value="high">Alta</option>
-                  <option value="medium">Media</option>
-                  <option value="low">Baixa</option>
+                <select
+                  value={priorityInput}
+                  onChange={(e) => setPriorityInput(e.target.value as "high" | "medium" | "low")}
+                  className="rounded-2xl px-3 py-2.5 text-sm outline-none cursor-pointer"
+                  style={{ ...glassGhost, background: "rgba(14,16,26,0.92)", color: "rgba(255,255,255,0.9)", border: "1px solid rgba(255,255,255,0.14)" }}
+                >
+                  <option value="high" style={{ background: "#0e101a", color: "#f4f6ff" }}>Alta</option>
+                  <option value="medium" style={{ background: "#0e101a", color: "#f4f6ff" }}>Media</option>
+                  <option value="low" style={{ background: "#0e101a", color: "#f4f6ff" }}>Baixa</option>
                 </select>
                 <button onClick={() => { addTask(taskInput, priorityInput); setTaskInput(""); }} className="label rounded-2xl px-3 py-2.5 text-white" style={glassPill}>Inserir</button>
               </div>
@@ -652,7 +669,7 @@ export default function Home() {
                 {tasks.map((task) => (
                   <div
                     key={task.id}
-                    className="flex items-center justify-between rounded-2xl px-4 py-2.5 transition-all duration-200"
+                    className="group flex items-center justify-between rounded-2xl px-4 py-2.5 transition-all duration-200"
                     style={{
                       background: task.completed ? "rgba(255,255,255,0.07)" : "rgba(255,255,255,0.03)",
                       border: task.completed ? "1px solid rgba(255,255,255,0.14)" : "1px solid rgba(255,255,255,0.08)",
@@ -687,7 +704,24 @@ export default function Home() {
                         {task.title}
                       </span>
                     </div>
-                    <span className="label" style={{ opacity: task.completed ? 0.35 : 0.7 }}>{task.priority}</span>
+                    <div className="flex items-center gap-3">
+                      <span className="label" style={{ opacity: task.completed ? 0.35 : 0.7 }}>{task.priority}</span>
+                      <button
+                        onClick={() => removeTask(task.id)}
+                        className="flex h-7 w-7 items-center justify-center rounded-full opacity-0 transition-opacity duration-150 group-hover:opacity-100 focus:opacity-100"
+                        style={{ ...glassGhost, color: "rgba(255,255,255,0.72)" }}
+                        aria-label="Excluir tarefa"
+                        title="Excluir tarefa"
+                      >
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                          <path d="M4 7H20" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+                          <path d="M9 7V5.6C9 4.72 9.72 4 10.6 4H13.4C14.28 4 15 4.72 15 5.6V7" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+                          <path d="M7.5 7L8.2 18.1C8.28 19.35 9.31 20.33 10.56 20.33H13.44C14.69 20.33 15.72 19.35 15.8 18.1L16.5 7" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+                          <path d="M10 11V16" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+                          <path d="M14 11V16" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+                        </svg>
+                      </button>
+                    </div>
                   </div>
                 ))}
               </div>
