@@ -594,7 +594,7 @@ export default function Home() {
 
 
       <div className="relative z-10 flex flex-col flex-1">
-        <header className="w-full flex justify-between items-start absolute top-0 left-0 p-5 z-10">
+        <header className="w-full flex justify-between items-start absolute top-0 left-0 p-4 sm:p-5 z-10">
           <div>
             <p className="label" style={{ color: "rgba(255,255,255,0.45)" }}>Studydim</p>
             <p className="label mt-0.5" style={{ color: "rgba(255,255,255,0.22)" }}>{dateLabel}</p>
@@ -604,7 +604,7 @@ export default function Home() {
           </div>
         </header>
 
-        <section className="flex-1 flex flex-col items-center justify-center gap-6 md:gap-8 pt-14 pb-2">
+        <section className="flex-1 flex flex-col items-center justify-center gap-6 md:gap-8 pt-24 sm:pt-14 pb-2">
           <div className="grid grid-cols-3 gap-1.5 w-full max-w-[420px]">
             {TIMER_MODES.map((modeItem) => {
               const isActive = timerMode === modeItem.id;
