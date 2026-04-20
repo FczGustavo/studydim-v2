@@ -16,6 +16,7 @@ body {
   padding: 0;
   overflow-x: hidden;
   overflow-y: auto;
+  -webkit-text-size-adjust: 100%;
 }
 
 body {
@@ -65,6 +66,17 @@ body::-webkit-scrollbar-thumb {
 .scroll-slim::-webkit-scrollbar-thumb {
   background: rgba(255, 255, 255, 0.1);
   border-radius: 2px;
+}
+
+button,
+a {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Safe area padding for fixed bottom nav on notched devices */
+.safe-bottom {
+  padding-bottom: max(1.5rem, env(safe-area-inset-bottom));
 }
 
 /* Liquid glass card */

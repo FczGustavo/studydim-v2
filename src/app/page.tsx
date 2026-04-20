@@ -77,11 +77,11 @@ const MOTIVATIONAL_QUOTES = [
 ];
 
 const NAV_ITEMS = [
-  { id: "focus" as const, label: "Timer" },
-  { id: "tasks" as const, label: "Tarefas" },
-  { id: "sound" as const, label: "Som" },
-  { id: "journal" as const, label: "Diario" },
-  { id: "settings" as const, label: "Configuracoes" },
+  { id: "focus" as const, label: "Timer", short: "Timer" },
+  { id: "tasks" as const, label: "Tarefas", short: "Tasks" },
+  { id: "sound" as const, label: "Som", short: "Som" },
+  { id: "journal" as const, label: "Diario", short: "Diario" },
+  { id: "settings" as const, label: "Configuracoes", short: "Config" },
 ];
 
 const TIMER_MODES: { id: TimerMode; label: string }[] = [
@@ -430,7 +430,7 @@ function SettingsModal({
             <input value={phrase} onChange={(e) => setPhrase(e.target.value)} placeholder="Digite para substituir as frases rotativas" className="mt-1 w-full rounded-xl px-3 py-2 text-white outline-none placeholder:text-white/30" style={glassGhost} />
           </label>
 
-          <div className="flex justify-end gap-2 pt-2">
+          <div className="flex flex-wrap justify-end gap-2 pt-2">
             <button onClick={onResetHeatmaps} className="h-10 w-44 rounded-full text-xs text-white/75" style={{ ...glassGhost, borderColor: "rgba(245,120,120,0.35)" }}>Resetar mapas de calor</button>
             <button onClick={onClose} className="h-10 w-28 rounded-full text-xs text-white/60" style={glassGhost}>Cancelar</button>
             <button onClick={() => onSave({ focus: Math.max(1, focus), shortBreak: Math.max(1, shortBreak), longBreak: Math.max(1, longBreak), phrase })} className="h-10 w-28 rounded-full text-xs text-white" style={glassPill}>Salvar</button>
@@ -586,10 +586,10 @@ export default function Home() {
     return `${resolvedCustomSound.src}${separator}autoplay=${soundAutoplay ? 1 : 0}`;
   }, [resolvedCustomSound, soundAutoplay]);
 
-  const timerButtonClass = "min-w-[108px] rounded-full px-4 py-1.5 text-xs uppercase tracking-[0.1em] font-mono transition-all duration-200";
+  const timerButtonClass = "w-full rounded-full px-3 py-2 sm:px-4 sm:py-1.5 text-xs uppercase tracking-[0.08em] font-mono transition-all duration-200";
 
   return (
-    <main className="relative min-h-screen w-full flex flex-col p-4 md:p-6 pb-40" style={{ background: "#08080f", height: "100vh", overflowY: "auto" }}>
+    <main className="relative w-full flex flex-col p-4 md:p-6 pb-28 sm:pb-36" style={{ background: "#08080f", minHeight: "100dvh", overflowY: "auto", overflowX: "hidden" }}>
       <div className="pointer-events-none absolute inset-0" style={{ background: "radial-gradient(ellipse at 50% 0%, rgba(82,88,170,0.07) 0%, transparent 65%)" }} />
 
 
@@ -599,7 +599,7 @@ export default function Home() {
             <p className="label" style={{ color: "rgba(255,255,255,0.45)" }}>Studydim</p>
             <p className="label mt-0.5" style={{ color: "rgba(255,255,255,0.22)" }}>{dateLabel}</p>
           </div>
-          <div className="max-w-[360px] text-right" style={{ opacity: quoteVisible ? 1 : 0.2, transition: "opacity 350ms ease" }}>
+          <div className="max-w-[45vw] sm:max-w-[360px] text-right" style={{ opacity: quoteVisible ? 1 : 0.2, transition: "opacity 350ms ease" }}>
             <p className="font-mono text-xs" style={{ color: "rgba(255,255,255,0.36)" }}>{displayedQuote}</p>
           </div>
         </header>
@@ -617,7 +617,7 @@ export default function Home() {
           </div>
 
           <div className="w-full text-center select-none">
-            <p className="font-mono font-black leading-none tracking-tight text-white text-[12vh] md:text-[13vh]" style={{ letterSpacing: "-0.04em", textShadow: "0 0 80px rgba(255,255,255,0.08)" }}>
+            <p className="font-mono font-black leading-none tracking-tight text-white text-[10vh] sm:text-[12vh] md:text-[13vh]" style={{ letterSpacing: "-0.04em", textShadow: "0 0 80px rgba(255,255,255,0.08)" }}>
               {formatTimer(secondsLeft)}
             </p>
           </div>
@@ -723,7 +723,7 @@ export default function Home() {
                       <span className="label" style={{ opacity: task.completed ? 0.35 : 0.7 }}>{task.priority}</span>
                       <button
                         onClick={() => removeTask(task.id)}
-                        className="flex h-7 w-7 items-center justify-center rounded-full opacity-0 transition-opacity duration-150 group-hover:opacity-100 focus:opacity-100"
+                        className="flex h-7 w-7 items-center justify-center rounded-full transition-opacity duration-150 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 sm:focus:opacity-100"
                         style={{ ...glassGhost, color: "rgba(255,255,255,0.72)" }}
                         aria-label="Excluir tarefa"
                         title="Excluir tarefa"
@@ -865,8 +865,8 @@ export default function Home() {
         </section>
       </div>
 
-      <nav className="fixed bottom-6 left-1/2 transform -translate-x-1/2 z-50">
-        <div className="flex items-center gap-1 px-3 py-2" style={{ borderRadius: "999px", ...glassPill }}>
+      <nav className="fixed bottom-4 sm:bottom-6 left-1/2 -translate-x-1/2 z-50 w-max max-w-[calc(100vw-1rem)]">
+        <div className="flex items-center gap-0.5 sm:gap-1 px-2 sm:px-3 py-1.5 sm:py-2" style={{ borderRadius: "999px", ...glassPill }}>
           {NAV_ITEMS.map((item) => {
             const active = item.id === "settings" ? settingsOpen : appTab === (item.id as typeof appTab);
             return (
@@ -879,10 +879,11 @@ export default function Home() {
                   }
                   setTab(item.id as "focus" | "tasks" | "sound" | "journal" | "settings");
                 }}
-                className="label px-4 py-2 rounded-full"
+                className="label px-2.5 sm:px-4 py-1.5 sm:py-2 rounded-full whitespace-nowrap"
                 style={{ ...(active ? { ...glassPill, ...glassActive } : {}), color: active ? "rgba(255,255,255,0.9)" : "rgba(255,255,255,0.35)" }}
               >
-                {item.label}
+                <span className="sm:hidden">{item.short}</span>
+                <span className="hidden sm:inline">{item.label}</span>
               </button>
             );
           })}

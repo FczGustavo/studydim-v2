@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Rajdhani, Share_Tech_Mono } from "next/font/google";
 import "./globals.css";
 
@@ -17,6 +17,13 @@ const shareTechMono = Share_Tech_Mono({
 export const metadata: Metadata = {
   title: "Studydim Tactical Console",
   description: "Plataforma stealth de foco, tempo e retencao para EFOMM.",
+};
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
 };
 
 export default function RootLayout({
