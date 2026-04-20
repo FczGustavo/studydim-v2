@@ -229,19 +229,23 @@ function Heatmap2D({ studyLogs, todayKey }: { studyLogs: { date: string; minutes
 }
 
 function Heatmap3D({ studyLogs }: { studyLogs: { date: string; minutes: number }[] }) {
-  const COLS = 16;
   const ROWS = 7;
-  const TW = 28;
-  const TH = 9;
-  const MAX_H = 36;
-  const SVG_W = 700;
-  const SVG_H = 250;
-  const CX = 287;
-  const CY = 38;
+  const TW = 18;
+  const TH = 6;
+  const MAX_H = 24;
 
   const data = useMemo(() => {
     const year = new Date().getFullYear();
-    const jan01 = new Date(year, 0, 1);
+    const periodStart = new Date(year, new Date().getMonth(), 1);
+    const periodEnd = new Date(year, 11, 31);
+    const gridStart = addDays(periodStart, -periodStart.getDay());
+    const totalDays = Math.round((periodEnd.getTime() - gridStart.getTime()) / 86_400_000);
+    const cols = Math.floor(totalDays / 7) + 1;
+    const svgW = cols * (TW / 2) + (ROWS + 2) * TW;
+    const svgH = (cols + ROWS + 4) * TH + MAX_H;
+    const cx = ROWS * (TW / 2) + 18;
+    const cy = MAX_H + TH + 10;
+
     const logMap = new Map<string, number>();
     studyLogs.forEach((entry) => {
       const key = entry.date.slice(0, 10);
@@ -250,25 +254,27 @@ function Heatmap3D({ studyLogs }: { studyLogs: { date: string; minutes: number }
 
     const grid: Array<{ row: number; col: number; minutes: number }> = [];
 
-    for (let col = 0; col < COLS; col++) {
+    for (let col = 0; col < cols; col++) {
       for (let row = 0; row < ROWS; row++) {
         const offset = col * 7 + row;
-        const date = addDays(jan01, offset);
+        const date = addDays(gridStart, offset);
+        if (date < periodStart || date > periodEnd) continue;
         const key = toDateKey(date);
         const minutes = logMap.get(key) ?? 0;
         grid.push({ row, col, minutes });
       }
     }
 
-    const monthLabels = Array.from({ length: 12 }, (_, month) => {
+    const monthLabels = Array.from({ length: 12 - periodStart.getMonth() }, (_, index) => {
+      const month = periodStart.getMonth() + index;
       const monthDate = new Date(year, month, 1);
       const offsetDays = Math.max(
         0,
-        Math.floor((monthDate.getTime() - jan01.getTime()) / 86_400_000),
+        Math.floor((monthDate.getTime() - gridStart.getTime()) / 86_400_000),
       );
       const col = Math.floor(offsetDays / 7);
-      const bx = CX + (col - (ROWS - 1)) * (TW / 2);
-      const by = CY + (col + (ROWS - 1)) * TH;
+      const bx = cx + (col - (ROWS - 1)) * (TW / 2);
+      const by = cy + (col + (ROWS - 1)) * TH;
       return {
         label: monthDate
           .toLocaleDateString("pt-BR", { month: "short" })
@@ -282,8 +288,8 @@ function Heatmap3D({ studyLogs }: { studyLogs: { date: string; minutes: number }
     const dayLabels = dayNames
       .map((label, row) => {
         if (row % 2 !== 0) return null;
-        const bx = CX + (0 - row) * (TW / 2);
-        const by = CY + (0 + row) * TH;
+        const bx = cx + (0 - row) * (TW / 2);
+        const by = cy + (0 + row) * TH;
         return { label, x: bx - TW / 2 - 5, y: by + 3 };
       })
       .filter((item): item is { label: string; x: number; y: number } => item !== null);
@@ -292,18 +298,22 @@ function Heatmap3D({ studyLogs }: { studyLogs: { date: string; minutes: number }
       grid: [...grid].sort((a, b) => a.col + a.row - (b.col + b.row) || a.col - b.col),
       monthLabels,
       dayLabels,
+      svgW,
+      svgH,
+      cx,
+      cy,
     };
   }, [studyLogs]);
 
   const points = (list: [number, number][]): string => list.map((p) => p.join(",")).join(" ");
 
   return (
-    <svg viewBox={`0 0 ${SVG_W} ${SVG_H}`} className="w-full max-w-[880px] h-auto mx-auto" preserveAspectRatio="xMidYMid meet" aria-label="Heatmap 3D">
+    <svg viewBox={`0 0 ${data.svgW} ${data.svgH}`} className="w-full max-w-[880px] h-auto mx-auto" preserveAspectRatio="xMidYMid meet" aria-label="Heatmap 3D">
       {data.grid.map((block) => {
         const intensity = normalizeHeatIntensity(block.minutes);
         const h = block.minutes > 0 ? Math.max(2, intensity * MAX_H) : 0;
-        const bx = CX + (block.col - block.row) * (TW / 2);
-        const by = CY + (block.col + block.row) * TH;
+        const bx = data.cx + (block.col - block.row) * (TW / 2);
+        const by = data.cy + (block.col + block.row) * TH;
 
         const N: [number, number] = [bx, by - TH];
         const E: [number, number] = [bx + TW / 2, by];
@@ -531,8 +541,6 @@ export default function Home() {
     return () => window.clearInterval(interval);
   }, [customMotivationalPhrase]);
 
-  const totalMinutes = useMemo(() => studyLogs.reduce((sum, item) => sum + item.minutes, 0), [studyLogs]);
-
   const dateLabel = useMemo(
     () => fromDateKey(todayKey).toLocaleDateString("pt-BR", { weekday: "short", day: "numeric", month: "short" }).replace(/\./g, ""),
     [todayKey],
@@ -540,14 +548,18 @@ export default function Home() {
 
   const displayedQuote = customMotivationalPhrase.trim() ? customMotivationalPhrase : MOTIVATIONAL_QUOTES[quoteIndex];
 
+  const focusStudyLogs = useMemo(() => studyLogs.filter((entry) => entry.mode === "focus"), [studyLogs]);
+
   const dailyMinutesMap = useMemo(() => {
     const map = new Map<string, number>();
-    studyLogs.forEach((entry) => {
+    focusStudyLogs.forEach((entry) => {
       const key = entry.date.slice(0, 10);
       map.set(key, (map.get(key) ?? 0) + entry.minutes);
     });
     return map;
-  }, [studyLogs]);
+  }, [focusStudyLogs]);
+
+  const totalMinutes = useMemo(() => focusStudyLogs.reduce((sum, item) => sum + item.minutes, 0), [focusStudyLogs]);
 
   const selectedDayMinutes = dailyMinutesMap.get(selectedDateKey) ?? 0;
   const selectedNote = dailyNotes[selectedDateKey] ?? "";
@@ -632,7 +644,7 @@ export default function Home() {
               </div>
             </div>
 
-            <Heatmap2D studyLogs={studyLogs} todayKey={todayKey} />
+            <Heatmap2D studyLogs={focusStudyLogs} todayKey={todayKey} />
 
             <div className="mt-2 flex items-center justify-center">
               <button onClick={() => setShow3D((value) => !value)} className="label rounded-full px-5 py-2" style={{ ...glassGhost, color: "rgba(255,255,255,0.48)" }}>
@@ -642,7 +654,7 @@ export default function Home() {
 
             {show3D && (
               <div className="mt-4 w-full">
-                <Heatmap3D studyLogs={studyLogs} />
+                <Heatmap3D studyLogs={focusStudyLogs} />
               </div>
             )}
           </div>
