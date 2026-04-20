@@ -43,7 +43,12 @@ function normalizeEmbedUrl(rawUrl: string): { type: "audio" | "iframe"; src: str
 
     if (host === "youtube.com" || host === "m.youtube.com") {
       const id = parsed.searchParams.get("v");
-      if (id) return { type: "iframe", src: `https://www.youtube.com/embed/${id}?rel=0&controls=1` };
+      const list = parsed.searchParams.get("list");
+      if (id) {
+        const listParam = list ? `&list=${list}` : "";
+        return { type: "iframe", src: `https://www.youtube.com/embed/${id}?rel=0&controls=1${listParam}` };
+      }
+      if (list) return { type: "iframe", src: `https://www.youtube.com/embed/videoseries?list=${list}&rel=0&controls=1` };
     }
 
     if (host === "youtu.be") {
@@ -600,7 +605,7 @@ export default function Home() {
         </header>
 
         <section className="flex-1 flex flex-col items-center justify-center gap-6 md:gap-8 pt-14 pb-2">
-          <div className="grid grid-cols-3 gap-1.5">
+          <div className="grid grid-cols-3 gap-1.5 w-full max-w-[420px]">
             {TIMER_MODES.map((modeItem) => {
               const isActive = timerMode === modeItem.id;
               return (
@@ -617,7 +622,7 @@ export default function Home() {
             </p>
           </div>
 
-          <div className="grid grid-cols-3 gap-1.5">
+          <div className="grid grid-cols-3 gap-1.5 w-full max-w-[420px]">
             <button onClick={toggleTimer} className={timerButtonClass} style={{ ...glassPill, color: "rgba(255,255,255,0.92)" }}>{timerRunning ? "Pausar" : "Iniciar"}</button>
             <button onClick={resetTimer} className={timerButtonClass} style={{ ...glassPill, color: "rgba(255,255,255,0.92)" }}>Reset</button>
             <button onClick={skipCycle} className={timerButtonClass} style={{ ...glassPill, color: "rgba(255,255,255,0.92)" }}>Proximo</button>
@@ -644,7 +649,7 @@ export default function Home() {
 
             <Heatmap2D studyLogs={focusStudyLogs} todayKey={todayKey} />
 
-            <div className="mt-2 flex items-center justify-center">
+            <div className="mt-5 flex items-center justify-center">
               <button onClick={() => setShow3D((value) => !value)} className="label rounded-full px-5 py-2" style={{ ...glassGhost, color: "rgba(255,255,255,0.48)" }}>
                 {show3D ? "Ocultar detalhes" : "Ver detalhes"}
               </button>
