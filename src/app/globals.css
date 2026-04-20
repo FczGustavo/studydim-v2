@@ -166,4 +166,8 @@ a {
     font-size: 0.8125rem !important;
     letter-spacing: 0.02em !important;
   }
+
+  .header-quote {
+    text-transform: none !important;
+  }
 }

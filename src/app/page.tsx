@@ -594,13 +594,13 @@ export default function Home() {
 
 
       <div className="relative z-10 flex flex-col flex-1">
-        <header className="w-full flex justify-between items-start absolute top-0 left-0 p-4 sm:p-5 z-10">
-          <div>
-            <p className="label header-label" style={{ color: "rgba(255,255,255,0.45)" }}>Studydim</p>
-            <p className="label header-date mt-0.5" style={{ color: "rgba(255,255,255,0.22)" }}>{dateLabel}</p>
+        <header className="absolute inset-x-0 top-0 z-10">
+          <div className="absolute left-4 top-4 flex flex-col items-start gap-0.5 sm:left-5 sm:top-5">
+            <p className="label header-label m-0 leading-none" style={{ color: "rgba(255,255,255,0.45)" }}>Studydim</p>
+            <p className="label header-date m-0 leading-none" style={{ color: "rgba(255,255,255,0.22)" }}>{dateLabel}</p>
           </div>
-          <div className="text-right" style={{ opacity: quoteVisible ? 1 : 0.2, transition: "opacity 350ms ease" }}>
-            <p className="label header-quote normal-case tracking-normal" style={{ color: "rgba(255,255,255,0.36)" }}>{displayedQuote}</p>
+          <div className="absolute right-4 top-4 max-w-[45vw] text-right sm:right-5 sm:top-5 sm:max-w-[360px]" style={{ opacity: quoteVisible ? 1 : 0.2, transition: "opacity 350ms ease" }}>
+            <p className="label header-quote normal-case tracking-normal m-0 leading-none" style={{ color: "rgba(255,255,255,0.36)" }}>{displayedQuote}</p>
           </div>
         </header>
 
