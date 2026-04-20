@@ -600,7 +600,7 @@ export default function Home() {
             <p className="label header-date mt-0.5" style={{ color: "rgba(255,255,255,0.22)" }}>{dateLabel}</p>
           </div>
           <div className="max-w-[45vw] sm:max-w-[360px] text-right" style={{ opacity: quoteVisible ? 1 : 0.2, transition: "opacity 350ms ease" }}>
-            <p className="font-mono text-xs header-quote" style={{ color: "rgba(255,255,255,0.36)" }}>{displayedQuote}</p>
+            <p className="label header-quote normal-case tracking-normal" style={{ color: "rgba(255,255,255,0.36)" }}>{displayedQuote}</p>
           </div>
         </header>
 
