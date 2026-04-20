@@ -8,6 +8,7 @@ import {
   initialTasks,
   initialTopics,
 } from "@/lib/mock-data";
+import { toLocalDateKey } from "@/lib/date";
 import type {
   AmbientTrack,
   ExtractedSchedule,
@@ -26,8 +27,6 @@ const SHORT_BREAK_DURATION = 5 * 60;
 const LONG_BREAK_DURATION = 15 * 60;
 const LONG_BREAK_EVERY = 4;
 const RECALL_INTERVALS = [7, 14, 30] as const;
-
-const toDateKey = (date: Date): string => date.toISOString().slice(0, 10);
 
 const DEFAULT_TIMER_DURATIONS = {
   focus: FOCUS_DURATION,
@@ -122,7 +121,7 @@ export const useStudydimStore = create<StudydimState>()(
       customMotivationalPhrase: "",
       dailyRatings: {},
       dailyNotes: {},
-      lastTaskRolloverDate: toDateKey(new Date()),
+      lastTaskRolloverDate: toLocalDateKey(new Date()),
 
       tasks: initialTasks,
       studyLogs: initialStudyLogs,

@@ -1,6 +1,7 @@
 ﻿"use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { fromLocalDateKey, toLocalDateKey, toLocalDateKeyFromTimestamp } from "@/lib/date";
 import { useStudydimStore } from "@/store/studydim-store";
 import type { TimerMode } from "@/types/domain";
 
@@ -10,10 +11,6 @@ function formatTimer(seconds: number): string {
   return `${mm}:${ss}`;
 }
 
-function toDateKey(date: Date): string {
-  return date.toISOString().slice(0, 10);
-}
-
 function addDays(date: Date, days: number): Date {
   const out = new Date(date);
   out.setDate(out.getDate() + days);
@@ -21,7 +18,7 @@ function addDays(date: Date, days: number): Date {
 }
 
 function fromDateKey(dateKey: string): Date {
-  return new Date(`${dateKey}T12:00:00`);
+  return fromLocalDateKey(dateKey);
 }
 
 function normalizeHeatIntensity(minutes: number): number {
@@ -128,7 +125,7 @@ function Heatmap2D({ studyLogs, todayKey }: { studyLogs: { date: string; minutes
 
     const logMap = new Map<string, number>();
     studyLogs.forEach((entry) => {
-      const key = entry.date.slice(0, 10);
+      const key = toLocalDateKeyFromTimestamp(entry.date);
       logMap.set(key, (logMap.get(key) ?? 0) + entry.minutes);
     });
 
@@ -136,7 +133,7 @@ function Heatmap2D({ studyLogs, todayKey }: { studyLogs: { date: string; minutes
 
     for (let i = 0; i <= totalDays; i++) {
       const date = addDays(gridStart, i);
-      const dateKey = toDateKey(date);
+      const dateKey = toLocalDateKey(date);
       const weekIndex = Math.floor(i / 7);
       const dayIndex = date.getDay();
       const inYear = date.getFullYear() === year;
@@ -248,7 +245,7 @@ function Heatmap3D({ studyLogs }: { studyLogs: { date: string; minutes: number }
 
     const logMap = new Map<string, number>();
     studyLogs.forEach((entry) => {
-      const key = entry.date.slice(0, 10);
+      const key = toLocalDateKeyFromTimestamp(entry.date);
       logMap.set(key, (logMap.get(key) ?? 0) + entry.minutes);
     });
 
@@ -259,7 +256,7 @@ function Heatmap3D({ studyLogs }: { studyLogs: { date: string; minutes: number }
         const offset = col * 7 + row;
         const date = addDays(gridStart, offset);
         if (date < periodStart || date > periodEnd) continue;
-        const key = toDateKey(date);
+        const key = toLocalDateKey(date);
         const minutes = logMap.get(key) ?? 0;
         grid.push({ row, col, minutes });
       }
@@ -273,14 +270,15 @@ function Heatmap3D({ studyLogs }: { studyLogs: { date: string; minutes: number }
         Math.floor((monthDate.getTime() - gridStart.getTime()) / 86_400_000),
       );
       const col = Math.floor(offsetDays / 7);
-      const bx = cx + (col - (ROWS - 1)) * (TW / 2);
-      const by = cy + (col + (ROWS - 1)) * TH;
+      const anchorRow = ROWS - 1;
+      const bx = cx + (col - anchorRow) * (TW / 2);
+      const by = cy + (col + anchorRow) * TH;
       return {
         label: monthDate
           .toLocaleDateString("pt-BR", { month: "short" })
           .replace(".", ""),
-        x: bx + 8,
-        y: by + TH + 12,
+        x: bx - TW / 2,
+        y: by + TH + 10,
       };
     });
 
@@ -350,7 +348,7 @@ function Heatmap3D({ studyLogs }: { studyLogs: { date: string; minutes: number }
           fontSize="7"
           fill="rgba(255,255,255,0.24)"
           fontFamily="monospace"
-          textAnchor="middle"
+          textAnchor="start"
         >
           {month.label}
         </text>
@@ -489,15 +487,15 @@ export default function Home() {
     const now = new Date();
     return new Date(now.getFullYear(), now.getMonth(), 1);
   });
-  const [selectedDateKey, setSelectedDateKey] = useState<string>(() => toDateKey(new Date()));
+  const [selectedDateKey, setSelectedDateKey] = useState<string>(() => toLocalDateKey(new Date()));
 
   // Reactive today — updates exactly at midnight without page reload
-  const [todayKey, setTodayKey] = useState(() => toDateKey(new Date()));
+  const [todayKey, setTodayKey] = useState(() => toLocalDateKey(new Date()));
   useEffect(() => {
     const now = new Date();
     const tomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
     const ms = tomorrow.getTime() - now.getTime();
-    const id = window.setTimeout(() => setTodayKey(toDateKey(new Date())), ms);
+    const id = window.setTimeout(() => setTodayKey(toLocalDateKey(new Date())), ms);
     return () => window.clearTimeout(id);
   }, [todayKey]);
 
@@ -553,7 +551,7 @@ export default function Home() {
   const dailyMinutesMap = useMemo(() => {
     const map = new Map<string, number>();
     focusStudyLogs.forEach((entry) => {
-      const key = entry.date.slice(0, 10);
+      const key = toLocalDateKeyFromTimestamp(entry.date);
       map.set(key, (map.get(key) ?? 0) + entry.minutes);
     });
     return map;
@@ -793,7 +791,7 @@ export default function Home() {
                     ))}
 
                     {monthDays.map((day) => {
-                      const key = toDateKey(day);
+                      const key = toLocalDateKey(day);
                       const inMonth = day.getMonth() === calendarMonth.getMonth();
                       const selected = key === selectedDateKey;
                       const isToday = key === todayKey;
