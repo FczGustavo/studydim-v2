@@ -594,11 +594,13 @@ export default function Home() {
 
 
       <div className="relative z-10 flex flex-col flex-1">
-        <header className="w-full absolute top-0 left-0 p-4 sm:p-5 z-10">
+        <header className="w-full flex justify-between items-start absolute top-0 left-0 p-4 sm:p-5 z-10">
           <div>
             <p className="label header-label" style={{ color: "rgba(255,255,255,0.45)" }}>Studydim</p>
             <p className="label header-date mt-0.5" style={{ color: "rgba(255,255,255,0.22)" }}>{dateLabel}</p>
-            <p className="label header-quote normal-case tracking-normal mt-0.5" style={{ opacity: quoteVisible ? 1 : 0.2, transition: "opacity 350ms ease", color: "rgba(255,255,255,0.36)" }}>{displayedQuote}</p>
+          </div>
+          <div className="text-right" style={{ opacity: quoteVisible ? 1 : 0.2, transition: "opacity 350ms ease" }}>
+            <p className="label header-quote normal-case tracking-normal" style={{ color: "rgba(255,255,255,0.36)" }}>{displayedQuote}</p>
           </div>
         </header>
 
