@@ -160,14 +160,8 @@ a {
 
 /* Scale up header elements to compensate for 80% zoom on desktop */
 @media (min-width: 768px) {
-  .header-label {
-    font-size: 0.8125rem !important;
-  }
-
-  .header-date {
-    font-size: 0.8125rem !important;
-  }
-
+  .header-label,
+  .header-date,
   .header-quote {
     font-size: 0.8125rem !important;
     letter-spacing: 0.02em !important;
