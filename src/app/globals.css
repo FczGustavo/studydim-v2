@@ -28,6 +28,13 @@ body {
   scrollbar-color: rgba(255, 255, 255, 0.18) rgba(255, 255, 255, 0.04);
 }
 
+/* Apply 80% zoom on desktop only */
+@media (min-width: 768px) {
+  body {
+    zoom: 0.8;
+  }
+}
+
 body::-webkit-scrollbar {
   width: 10px;
 }
@@ -149,4 +156,19 @@ a {
 
 .rise {
   animation: rise 0.35s ease-out both;
+}
+
+/* Scale up header elements to compensate for 80% zoom on desktop */
+@media (min-width: 768px) {
+  .header-label {
+    font-size: 0.8125rem !important;
+  }
+
+  .header-date {
+    font-size: 0.8125rem !important;
+  }
+
+  .header-quote {
+    font-size: 0.8125rem !important;
+  }
 }
