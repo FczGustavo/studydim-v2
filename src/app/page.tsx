@@ -1,6 +1,6 @@
 ﻿"use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { fromLocalDateKey, toLocalDateKey, toLocalDateKeyFromTimestamp } from "@/lib/date";
 import { useStudydimStore } from "@/store/studydim-store";
 import type { TimerMode } from "@/types/domain";
@@ -46,14 +46,27 @@ function normalizeEmbedUrl(rawUrl: string): { type: "audio" | "iframe"; src: str
       const list = parsed.searchParams.get("list");
       if (id) {
         const listParam = list ? `&list=${list}` : "";
-        return { type: "iframe", src: `https://www.youtube.com/embed/${id}?rel=0&controls=1${listParam}` };
+        return {
+          type: "iframe",
+          src: `https://www.youtube-nocookie.com/embed/${id}?rel=0&controls=1&modestbranding=1&playsinline=1${listParam}`,
+        };
       }
-      if (list) return { type: "iframe", src: `https://www.youtube.com/embed/videoseries?list=${list}&rel=0&controls=1` };
+      if (list) {
+        return {
+          type: "iframe",
+          src: `https://www.youtube-nocookie.com/embed/videoseries?list=${list}&rel=0&controls=1&modestbranding=1&playsinline=1`,
+        };
+      }
     }
 
     if (host === "youtu.be") {
       const id = parsed.pathname.slice(1);
-      if (id) return { type: "iframe", src: `https://www.youtube.com/embed/${id}?rel=0&controls=1` };
+      if (id) {
+        return {
+          type: "iframe",
+          src: `https://www.youtube-nocookie.com/embed/${id}?rel=0&controls=1&modestbranding=1&playsinline=1`,
+        };
+      }
     }
 
     if (host === "open.spotify.com") {
@@ -441,6 +454,70 @@ function SettingsModal({
   );
 }
 
+const AmbientPlayer = memo(function AmbientPlayer({
+  appTab,
+  resolvedCustomSound,
+  customSoundSrc,
+  fallbackSoundSrc,
+  soundAutoplay,
+  soundReloadSeed,
+}: {
+  appTab: "focus" | "tasks" | "sound" | "journal" | "settings";
+  resolvedCustomSound: { type: "audio" | "iframe"; src: string } | null;
+  customSoundSrc: string;
+  fallbackSoundSrc: string;
+  soundAutoplay: boolean;
+  soundReloadSeed: number;
+}) {
+  const docked = appTab !== "sound";
+
+  return (
+    <div
+      className="rounded-2xl overflow-hidden"
+      style={
+        docked
+          ? {
+              position: "fixed",
+              right: 12,
+              bottom: 96,
+              width: "min(340px, calc(100vw - 24px))",
+              zIndex: 35,
+              background: "rgba(10,10,18,0.75)",
+              border: "1px solid rgba(255,255,255,0.12)",
+              boxShadow: "0 12px 28px rgba(0,0,0,0.45)",
+            }
+          : { marginTop: "1rem" }
+      }
+    >
+      {resolvedCustomSound?.type === "audio" ? (
+        <audio
+          key={`p-${resolvedCustomSound.src}-${soundReloadSeed}`}
+          src={resolvedCustomSound.src}
+          controls
+          autoPlay={soundAutoplay}
+          className="w-full"
+          style={{ colorScheme: "dark", display: "block" }}
+        />
+      ) : (
+        <iframe
+          key={`p-${customSoundSrc || fallbackSoundSrc}-${soundReloadSeed}`}
+          src={customSoundSrc || fallbackSoundSrc}
+          title="Player"
+          allow="autoplay; encrypted-media; picture-in-picture"
+          referrerPolicy="strict-origin-when-cross-origin"
+          allowFullScreen
+          style={{
+            display: "block",
+            width: "100%",
+            aspectRatio: "16/9",
+            height: "auto",
+          }}
+        />
+      )}
+    </div>
+  );
+});
+
 export default function Home() {
   const {
     appTab,
@@ -631,7 +708,8 @@ export default function Home() {
   const resolvedCustomSound = useMemo(() => normalizeEmbedUrl(customSoundUrl), [customSoundUrl]);
 
   const fallbackSoundSrc = useMemo(
-    () => `https://www.youtube.com/embed/${currentTrackId}?autoplay=${soundAutoplay ? 1 : 0}&controls=1&rel=0`,
+    () =>
+      `https://www.youtube-nocookie.com/embed/${currentTrackId}?autoplay=${soundAutoplay ? 1 : 0}&controls=1&rel=0&modestbranding=1&playsinline=1`,
     [currentTrackId, soundAutoplay],
   );
 
@@ -884,50 +962,14 @@ export default function Home() {
             </div>
           )}
           {/* Always-mounted player — key only changes on URL/reload, never on tab switch */}
-          <div
-            className={appTab === "sound" ? "rounded-2xl overflow-hidden" : ""}
-            style={
-              appTab === "sound"
-                ? { marginTop: "1rem" }
-                : {
-                    position: "fixed",
-                    right: 12,
-                    bottom: 96,
-                    width: 320,
-                    height: 180,
-                    opacity: 0.01,
-                    pointerEvents: "none",
-                    visibility: "hidden",
-                    transform: "translateZ(0)",
-                  }
-            }
-          >
-            {resolvedCustomSound?.type === "audio" ? (
-              <audio
-                key={`p-${resolvedCustomSound.src}-${soundReloadSeed}`}
-                src={resolvedCustomSound.src}
-                controls={appTab === "sound"}
-                autoPlay={soundAutoplay}
-                className="w-full"
-                style={{ colorScheme: "dark", display: "block" }}
-              />
-            ) : (
-              <iframe
-                key={`p-${customSoundSrc || fallbackSoundSrc}-${soundReloadSeed}`}
-                src={customSoundSrc || fallbackSoundSrc}
-                title="Player"
-                allow="autoplay; encrypted-media"
-                referrerPolicy="strict-origin-when-cross-origin"
-                allowFullScreen
-                style={{
-                  display: "block",
-                  width: "100%",
-                  aspectRatio: appTab === "sound" ? "16/9" : undefined,
-                  height: appTab === "sound" ? undefined : "100%",
-                }}
-              />
-            )}
-          </div>
+          <AmbientPlayer
+            appTab={appTab}
+            resolvedCustomSound={resolvedCustomSound}
+            customSoundSrc={customSoundSrc}
+            fallbackSoundSrc={fallbackSoundSrc}
+            soundAutoplay={soundAutoplay}
+            soundReloadSeed={soundReloadSeed}
+          />
         </section>
       </div>
 
