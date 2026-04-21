@@ -479,8 +479,8 @@ const AmbientPlayer = memo(function AmbientPlayer({
           ? {
               position: "fixed",
               right: 12,
-              bottom: 96,
-              width: "min(340px, calc(100vw - 24px))",
+              top: 72,
+              width: "min(240px, calc(100vw - 24px))",
               zIndex: 35,
               background: "rgba(10,10,18,0.75)",
               border: "1px solid rgba(255,255,255,0.12)",
