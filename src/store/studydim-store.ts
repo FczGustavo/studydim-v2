@@ -91,6 +91,7 @@ interface StudydimState {
   toggleTimer: () => void;
   resetTimer: () => void;
   skipCycle: () => void;
+  advanceTimerBy: (elapsedSeconds: number) => void;
   tick: () => void;
 
   addTask: (title: string, priority: Task["priority"]) => void;
@@ -222,47 +223,76 @@ export const useStudydimStore = create<StudydimState>()(
           };
         }),
 
+      advanceTimerBy: (elapsedSeconds) =>
+        set((state) => {
+          if (!state.timerRunning) return state;
+
+          const elapsed = Number.isFinite(elapsedSeconds)
+            ? Math.max(0, Math.floor(elapsedSeconds))
+            : 0;
+
+          if (elapsed <= 0) return state;
+
+          let remaining = elapsed;
+          let secondsLeft = state.secondsLeft;
+          let timerMode = state.timerMode;
+          let focusCyclesCompleted = state.focusCyclesCompleted;
+          let studyLogs = state.studyLogs;
+          let modeSwitchedAt = state.modeSwitchedAt;
+
+          while (remaining > 0) {
+            if (secondsLeft > remaining) {
+              secondsLeft -= remaining;
+              remaining = 0;
+              break;
+            }
+
+            remaining -= secondsLeft;
+
+            const now = new Date().toISOString();
+            const isFocus = timerMode === "focus";
+            const completedCycles = isFocus
+              ? focusCyclesCompleted + 1
+              : focusCyclesCompleted;
+
+            const nextMode: TimerMode = isFocus
+              ? completedCycles % LONG_BREAK_EVERY === 0
+                ? "longBreak"
+                : "shortBreak"
+              : "focus";
+
+            const completedMinutes = Math.round(
+              modeDuration(timerMode, state.timerDurations) / 60,
+            );
+
+            studyLogs = [
+              {
+                id: `log-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+                date: now,
+                minutes: completedMinutes,
+                focusScore: nextMode === "focus" ? 85 : 65,
+                mode: timerMode,
+              },
+              ...studyLogs,
+            ].slice(0, 180);
+
+            timerMode = nextMode;
+            secondsLeft = modeDuration(nextMode, state.timerDurations);
+            focusCyclesCompleted = completedCycles;
+            modeSwitchedAt = now;
+          }
+
+          return {
+            timerMode,
+            secondsLeft,
+            focusCyclesCompleted,
+            modeSwitchedAt,
+            studyLogs,
+          };
+        }),
+
       tick: () => {
-        const state = get();
-        if (!state.timerRunning) return;
-
-        if (state.secondsLeft > 1) {
-          set({ secondsLeft: state.secondsLeft - 1 });
-          return;
-        }
-
-        const now = new Date().toISOString();
-        const isFocus = state.timerMode === "focus";
-        const completedCycles = isFocus
-          ? state.focusCyclesCompleted + 1
-          : state.focusCyclesCompleted;
-
-        const nextMode: TimerMode = isFocus
-          ? completedCycles % LONG_BREAK_EVERY === 0
-            ? "longBreak"
-            : "shortBreak"
-          : "focus";
-
-        const completedMinutes = Math.round(
-          modeDuration(state.timerMode, state.timerDurations) / 60,
-        );
-
-        set({
-          timerMode: nextMode,
-          secondsLeft: modeDuration(nextMode, state.timerDurations),
-          focusCyclesCompleted: completedCycles,
-          modeSwitchedAt: now,
-          studyLogs: [
-            {
-              id: `log-${Date.now()}`,
-              date: now,
-              minutes: completedMinutes,
-              focusScore: nextMode === "focus" ? 85 : 65,
-              mode: state.timerMode,
-            },
-            ...state.studyLogs,
-          ].slice(0, 180),
-        });
+        get().advanceTimerBy(1);
       },
 
       addTask: (title, priority) => {

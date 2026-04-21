@@ -1,6 +1,6 @@
 ﻿"use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { fromLocalDateKey, toLocalDateKey, toLocalDateKeyFromTimestamp } from "@/lib/date";
 import { useStudydimStore } from "@/store/studydim-store";
 import type { TimerMode } from "@/types/domain";
@@ -465,7 +465,7 @@ export default function Home() {
     toggleTimer,
     resetTimer,
     skipCycle,
-    tick,
+    advanceTimerBy,
     addTask,
     toggleTask,
     removeTask,
@@ -509,12 +509,48 @@ export default function Home() {
   }, [todayKey, rolloverTasksForDate]);
 
   const previousSwitchRef = useRef(modeSwitchedAt);
+  const lastTickAtRef = useRef<number | null>(null);
+
+  const syncTimerWithElapsed = useCallback(() => {
+    if (!timerRunning) return;
+
+    const now = Date.now();
+    if (lastTickAtRef.current === null) {
+      lastTickAtRef.current = now;
+      return;
+    }
+
+    const elapsedSeconds = Math.floor((now - lastTickAtRef.current) / 1000);
+    if (elapsedSeconds <= 0) return;
+
+    lastTickAtRef.current += elapsedSeconds * 1000;
+    advanceTimerBy(elapsedSeconds);
+  }, [timerRunning, advanceTimerBy]);
 
   useEffect(() => {
-    if (!timerRunning) return;
-    const id = window.setInterval(() => tick(), 1000);
-    return () => window.clearInterval(id);
-  }, [timerRunning, tick]);
+    if (!timerRunning) {
+      lastTickAtRef.current = null;
+      return;
+    }
+
+    lastTickAtRef.current = Date.now();
+    const id = window.setInterval(syncTimerWithElapsed, 1000);
+
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        syncTimerWithElapsed();
+      }
+    };
+
+    window.addEventListener("focus", syncTimerWithElapsed);
+    document.addEventListener("visibilitychange", onVisibilityChange);
+
+    return () => {
+      window.clearInterval(id);
+      window.removeEventListener("focus", syncTimerWithElapsed);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+    };
+  }, [timerRunning, syncTimerWithElapsed]);
 
   useEffect(() => {
     if (!modeSwitchedAt || modeSwitchedAt === previousSwitchRef.current) return;
@@ -566,6 +602,25 @@ export default function Home() {
 
   const selectedDayMinutes = dailyMinutesMap.get(selectedDateKey) ?? 0;
   const selectedNote = dailyNotes[selectedDateKey] ?? "";
+
+  const sortedTasks = useMemo(() => {
+    const priorityWeight: Record<"high" | "medium" | "low", number> = {
+      high: 3,
+      medium: 2,
+      low: 1,
+    };
+
+    return [...tasks].sort((a, b) => {
+      if (a.completed !== b.completed) {
+        return a.completed ? 1 : -1;
+      }
+
+      const priorityDiff = priorityWeight[b.priority] - priorityWeight[a.priority];
+      if (priorityDiff !== 0) return priorityDiff;
+
+      return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+    });
+  }, [tasks]);
 
   const monthDays = useMemo(() => {
     const monthStart = new Date(calendarMonth.getFullYear(), calendarMonth.getMonth(), 1);
@@ -681,7 +736,7 @@ export default function Home() {
               </div>
 
               <div className="scroll-slim max-h-64 space-y-1.5 overflow-y-auto pr-1">
-                {tasks.map((task) => (
+                {sortedTasks.map((task) => (
                   <div
                     key={task.id}
                     className="group flex items-center justify-between rounded-2xl px-4 py-2.5 transition-all duration-200"
@@ -834,7 +889,17 @@ export default function Home() {
             style={
               appTab === "sound"
                 ? { marginTop: "1rem" }
-                : { position: "fixed", left: -9999, top: -9999, width: 1, height: 1, opacity: 0, pointerEvents: "none" }
+                : {
+                    position: "fixed",
+                    right: 12,
+                    bottom: 96,
+                    width: 320,
+                    height: 180,
+                    opacity: 0.01,
+                    pointerEvents: "none",
+                    visibility: "hidden",
+                    transform: "translateZ(0)",
+                  }
             }
           >
             {resolvedCustomSound?.type === "audio" ? (
@@ -852,12 +917,13 @@ export default function Home() {
                 src={customSoundSrc || fallbackSoundSrc}
                 title="Player"
                 allow="autoplay; encrypted-media"
+                referrerPolicy="strict-origin-when-cross-origin"
                 allowFullScreen
                 style={{
                   display: "block",
                   width: "100%",
                   aspectRatio: appTab === "sound" ? "16/9" : undefined,
-                  height: appTab === "sound" ? undefined : 1,
+                  height: appTab === "sound" ? undefined : "100%",
                 }}
               />
             )}
