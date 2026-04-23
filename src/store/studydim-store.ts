@@ -132,7 +132,7 @@ export const useStudydimStore = create<StudydimState>()(
       circles: initialCircles,
 
       ambientTracks,
-      currentTrackId: ambientTracks[0]?.youtubeId ?? "",
+      currentTrackId: "",
       customSoundUrl: "",
 
       setTab: (tab) => set({ appTab: tab }),

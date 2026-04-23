@@ -112,7 +112,7 @@ export const initialCircles: StudyCircle[] = [
 ];
 
 export const ambientTracks: AmbientTrack[] = [
-  { title: "Radar Rain - LoFi Ops", youtubeId: "5qap5aO4i9A" },
-  { title: "Deep Focus Signal", youtubeId: "DWcJFNfaw9c" },
-  { title: "Naval Engine Room Ambience", youtubeId: "XULUBg_ZcAU" },
+  { title: "Dark Academia", youtubeId: "rCmQJfAzwEQ" },
+  { title: "Night Studies", youtubeId: "ZrKPW5d3idY" },
+  { title: "Dark Academia Piano", youtubeId: "SllpB3W5f6s" },
 ];

@@ -11,6 +11,15 @@ function formatTimer(seconds: number): string {
   return `${mm}:${ss}`;
 }
 
+function formatMinutesAsHours(minutes: number): string {
+  const safeMinutes = Math.max(0, Math.round(minutes));
+  const hours = Math.floor(safeMinutes / 60)
+    .toString()
+    .padStart(2, "0");
+  const mins = (safeMinutes % 60).toString().padStart(2, "0");
+  return `${hours}:${mins}h`;
+}
+
 function addDays(date: Date, days: number): Date {
   const out = new Date(date);
   out.setDate(out.getDate() + days);
@@ -87,6 +96,21 @@ const MOTIVATIONAL_QUOTES = [
   "As vezes voce ganha, as vezes voce aprende.",
   "Disciplina pesa gramas. Arrependimento pesa toneladas.",
   "Consistencia vence intensidade ocasional.",
+  "Nós somos o que fazemos repetidamente. A excelência, portanto, não é um ato, mas um hábito. — Aristóteles",
+  "A disciplina é a alma de um exército. Ela torna pequenos contingentes formidáveis; fornece sucesso aos fracos e estima a todos. — George Washington",
+  "Se você quer mudar o mundo, comece arrumando a sua cama. — Almirante William H. McRaven",
+  "O sucesso não é final, o fracasso não é fatal: é a coragem de continuar que conta. — Winston Churchill",
+  "Eu não falhei. Apenas descobri 10.000 caminhos que não funcionam. — Thomas Edison",
+  "Não importa o quão devagar você vá, desde que você não pare. — Confúcio",
+  "A coragem é a resistência ao medo, o domínio do medo, e não a ausência do medo. — Mark Twain",
+  "A sorte é o que acontece quando a preparação encontra a oportunidade. — Sêneca",
+  "A diferença entre uma pessoa de sucesso e as outras não é a falta de força, nem a falta de conhecimento, mas sim a falta de vontade. — Vince Lombardi",
+  "Quem tem um 'porquê' pelo qual viver suporta quase qualquer 'como'. — Viktor Frankl",
+  "A força não provém da capacidade física. Provém de uma vontade indomável. — Mahatma Gandhi",
+  "O homem que move uma montanha começa carregando pequenas pedras. — Provérbio Chinês",
+  "Obstáculos são aquelas coisas assustadoras que você vê quando tira os olhos do seu objetivo. — Henry Ford",
+  "Para ter o que nunca teve, você precisa fazer o que nunca fez. — Thomas Jefferson",
+  "A dor é temporária. Ela pode durar um minuto, ou uma hora, ou um dia, ou um ano... mas se eu desistir, ela durará para sempre. — Lance Armstrong"
 ];
 
 const NAV_ITEMS = [
@@ -236,7 +260,7 @@ function Heatmap2D({ studyLogs, todayKey }: { studyLogs: { date: string; minutes
           style={{ left: tooltip.x, top: tooltip.y, ...glassPill, fontSize: "0.7rem", color: "rgba(255,255,255,0.85)" }}
         >
           <p className="font-mono">{tooltip.label}</p>
-          <p className="font-mono">{tooltip.value} min</p>
+          <p className="font-mono">{formatMinutesAsHours(tooltip.value)}</p>
         </div>
       )}
     </div>
@@ -470,16 +494,67 @@ const AmbientPlayer = memo(function AmbientPlayer({
   soundReloadSeed: number;
 }) {
   const docked = appTab !== "sound";
+  const playerRef = useRef<HTMLDivElement | null>(null);
+  const dragStateRef = useRef<{ offsetX: number; offsetY: number; active: boolean }>({
+    offsetX: 0,
+    offsetY: 0,
+    active: false,
+  });
+  const [dockedPosition, setDockedPosition] = useState<{ x: number; y: number }>({ x: 12, y: 72 });
+
+  useEffect(() => {
+    if (!docked) return;
+
+    const width = playerRef.current?.offsetWidth ?? 240;
+    setDockedPosition((prev) => {
+      if (prev.x !== 12 || prev.y !== 72) return prev;
+      return { x: Math.max(12, window.innerWidth - width - 12), y: 72 };
+    });
+  }, [docked]);
+
+  const onPointerDownDrag = useCallback((event: React.PointerEvent<HTMLButtonElement>) => {
+    if (!docked || !playerRef.current) return;
+
+    const rect = playerRef.current.getBoundingClientRect();
+    dragStateRef.current = {
+      active: true,
+      offsetX: event.clientX - rect.left,
+      offsetY: event.clientY - rect.top,
+    };
+
+    const onPointerMove = (moveEvent: PointerEvent) => {
+      if (!dragStateRef.current.active) return;
+
+      const width = playerRef.current?.offsetWidth ?? 240;
+      const height = playerRef.current?.offsetHeight ?? 180;
+      const maxX = Math.max(8, window.innerWidth - width - 8);
+      const maxY = Math.max(8, window.innerHeight - height - 8);
+
+      const nextX = Math.max(8, Math.min(maxX, moveEvent.clientX - dragStateRef.current.offsetX));
+      const nextY = Math.max(8, Math.min(maxY, moveEvent.clientY - dragStateRef.current.offsetY));
+      setDockedPosition({ x: nextX, y: nextY });
+    };
+
+    const onPointerUp = () => {
+      dragStateRef.current.active = false;
+      window.removeEventListener("pointermove", onPointerMove);
+      window.removeEventListener("pointerup", onPointerUp);
+    };
+
+    window.addEventListener("pointermove", onPointerMove);
+    window.addEventListener("pointerup", onPointerUp);
+  }, [docked]);
 
   return (
     <div
+      ref={playerRef}
       className="rounded-2xl overflow-hidden"
       style={
         docked
           ? {
               position: "fixed",
-              right: 12,
-              top: 72,
+              left: dockedPosition.x,
+              top: dockedPosition.y,
               width: "min(240px, calc(100vw - 24px))",
               zIndex: 35,
               background: "rgba(10,10,18,0.75)",
@@ -489,6 +564,22 @@ const AmbientPlayer = memo(function AmbientPlayer({
           : { marginTop: "1rem" }
       }
     >
+      {docked && (
+        <button
+          type="button"
+          onPointerDown={onPointerDownDrag}
+          className="w-full px-3 py-1.5 text-left font-mono text-[0.65rem] tracking-[0.08em] uppercase"
+          style={{
+            borderBottom: "1px solid rgba(255,255,255,0.12)",
+            background: "rgba(255,255,255,0.05)",
+            color: "rgba(255,255,255,0.62)",
+            cursor: "grab",
+            touchAction: "none",
+          }}
+        >
+          mover player
+        </button>
+      )}
       {resolvedCustomSound?.type === "audio" ? (
         <audio
           key={`p-${resolvedCustomSound.src}-${soundReloadSeed}`}
@@ -707,9 +798,18 @@ export default function Home() {
 
   const resolvedCustomSound = useMemo(() => normalizeEmbedUrl(customSoundUrl), [customSoundUrl]);
 
+  const hasQuickTrack = Boolean(currentTrackId);
+
+  const shouldShowAmbientPlayer =
+    resolvedCustomSound?.type === "audio" ||
+    resolvedCustomSound?.type === "iframe" ||
+    (!resolvedCustomSound && hasQuickTrack);
+
   const fallbackSoundSrc = useMemo(
-    () =>
-      `https://www.youtube-nocookie.com/embed/${currentTrackId}?autoplay=${soundAutoplay ? 1 : 0}&controls=1&rel=0&modestbranding=1&playsinline=1`,
+    () => {
+      if (!currentTrackId) return "";
+      return `https://www.youtube-nocookie.com/embed/${currentTrackId}?autoplay=${soundAutoplay ? 1 : 0}&controls=1&rel=0&modestbranding=1&playsinline=1&loop=1&playlist=${currentTrackId}`;
+    },
     [currentTrackId, soundAutoplay],
   );
 
@@ -771,12 +871,12 @@ export default function Home() {
           <div className="w-full max-w-6xl mx-auto flex flex-col items-center">
             <div className="w-full flex justify-between items-end mb-4">
               <div>
-                <p className="font-semibold" style={{ fontSize: "0.78rem", color: "rgba(255,255,255,0.5)", letterSpacing: "0.08em", textTransform: "uppercase" }}>Minutos de estudo</p>
+                <p className="font-semibold" style={{ fontSize: "0.78rem", color: "rgba(255,255,255,0.5)", letterSpacing: "0.08em", textTransform: "uppercase" }}>Horas de estudo</p>
                 <p className="label mt-0.5" style={{ color: "rgba(255,255,255,0.2)" }}>janeiro a dezembro</p>
               </div>
               <div className="text-right">
-                <p className="font-mono font-bold" style={{ fontSize: "1.6rem", color: "rgba(255,255,255,0.65)" }}>{totalMinutes}</p>
-                <p className="label" style={{ color: "rgba(255,255,255,0.22)" }}>total (min)</p>
+                <p className="font-mono font-bold" style={{ fontSize: "1.6rem", color: "rgba(255,255,255,0.65)" }}>{formatMinutesAsHours(totalMinutes)}</p>
+                <p className="label" style={{ color: "rgba(255,255,255,0.22)" }}>total (h)</p>
               </div>
             </div>
 
@@ -955,21 +1055,23 @@ export default function Home() {
 
                 <div className="rounded-2xl p-3 space-y-2" style={glassGhost}>
                   <p className="font-mono text-sm text-white/75">{fromDateKey(selectedDateKey).toLocaleDateString("pt-BR", { weekday: "long", day: "2-digit", month: "2-digit", year: "numeric" })}</p>
-                  <p className="label" style={{ color: "rgba(255,255,255,0.28)" }}>Estudo no dia: {selectedDayMinutes} min</p>
+                  <p className="label" style={{ color: "rgba(255,255,255,0.28)" }}>Estudo no dia: {formatMinutesAsHours(selectedDayMinutes)}</p>
                   <textarea rows={12} value={selectedNote} onChange={(e) => setDailyNote(selectedDateKey, e.target.value)} placeholder="Escreva observacoes do dia" className="w-full rounded-xl px-3 py-2 text-sm text-white outline-none resize-none placeholder:text-white/25" style={glassGhost} />
                 </div>
               </div>
             </div>
           )}
           {/* Always-mounted player — key only changes on URL/reload, never on tab switch */}
-          <AmbientPlayer
-            appTab={appTab}
-            resolvedCustomSound={resolvedCustomSound}
-            customSoundSrc={customSoundSrc}
-            fallbackSoundSrc={fallbackSoundSrc}
-            soundAutoplay={soundAutoplay}
-            soundReloadSeed={soundReloadSeed}
-          />
+          {shouldShowAmbientPlayer && (
+            <AmbientPlayer
+              appTab={appTab}
+              resolvedCustomSound={resolvedCustomSound}
+              customSoundSrc={customSoundSrc}
+              fallbackSoundSrc={fallbackSoundSrc}
+              soundAutoplay={soundAutoplay}
+              soundReloadSeed={soundReloadSeed}
+            />
+          )}
         </section>
       </div>
 
