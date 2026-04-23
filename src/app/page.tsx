@@ -11,6 +11,18 @@ function formatTimer(seconds: number): string {
   return `${mm}:${ss}`;
 }
 
+function formatChronometer(seconds: number): string {
+  const safeSeconds = Math.max(0, Math.floor(seconds));
+  const hh = Math.floor(safeSeconds / 3600)
+    .toString()
+    .padStart(2, "0");
+  const mm = Math.floor((safeSeconds % 3600) / 60)
+    .toString()
+    .padStart(2, "0");
+  const ss = (safeSeconds % 60).toString().padStart(2, "0");
+  return `${hh}:${mm}:${ss}`;
+}
+
 function formatMinutesAsHours(minutes: number): string {
   const safeMinutes = Math.max(0, Math.round(minutes));
   const hours = Math.floor(safeMinutes / 60)
@@ -418,6 +430,7 @@ function SettingsModal({
   focusMinutes,
   shortBreakMinutes,
   longBreakMinutes,
+  timerSystemMode,
   motivationalPhrase,
   onSave,
   onResetHeatmaps,
@@ -426,14 +439,16 @@ function SettingsModal({
   focusMinutes: number;
   shortBreakMinutes: number;
   longBreakMinutes: number;
+  timerSystemMode: "pomodoro" | "chronometer";
   motivationalPhrase: string;
-  onSave: (payload: { focus: number; shortBreak: number; longBreak: number; phrase: string }) => void;
+  onSave: (payload: { focus: number; shortBreak: number; longBreak: number; phrase: string; mode: "pomodoro" | "chronometer" }) => void;
   onResetHeatmaps: () => void;
 }) {
   const [focus, setFocus] = useState(focusMinutes);
   const [shortBreak, setShortBreak] = useState(shortBreakMinutes);
   const [longBreak, setLongBreak] = useState(longBreakMinutes);
   const [phrase, setPhrase] = useState(motivationalPhrase);
+  const [mode, setMode] = useState<"pomodoro" | "chronometer">(timerSystemMode);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
@@ -447,6 +462,28 @@ function SettingsModal({
         </div>
 
         <div className="space-y-3">
+          <div>
+            <p className="mb-1 text-xs text-white/70">Modo de tempo</p>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => setMode("pomodoro")}
+                className="rounded-xl px-3 py-2 text-xs"
+                style={mode === "pomodoro" ? { ...glassPill, ...glassActive, color: "rgba(255,255,255,0.9)" } : { ...glassGhost, color: "rgba(255,255,255,0.62)" }}
+              >
+                Pomodoro
+              </button>
+              <button
+                type="button"
+                onClick={() => setMode("chronometer")}
+                className="rounded-xl px-3 py-2 text-xs"
+                style={mode === "chronometer" ? { ...glassPill, ...glassActive, color: "rgba(255,255,255,0.9)" } : { ...glassGhost, color: "rgba(255,255,255,0.62)" }}
+              >
+                Cronometro
+              </button>
+            </div>
+          </div>
+
           <div className="grid grid-cols-3 gap-2">
             <label className="text-xs text-white/70">
               Focus (min)
@@ -470,7 +507,7 @@ function SettingsModal({
           <div className="flex flex-wrap justify-end gap-2 pt-2">
             <button onClick={onResetHeatmaps} className="h-10 w-44 rounded-full text-xs text-white/75" style={{ ...glassGhost, borderColor: "rgba(245,120,120,0.35)" }}>Resetar mapas de calor</button>
             <button onClick={onClose} className="h-10 w-28 rounded-full text-xs text-white/60" style={glassGhost}>Cancelar</button>
-            <button onClick={() => onSave({ focus: Math.max(1, focus), shortBreak: Math.max(1, shortBreak), longBreak: Math.max(1, longBreak), phrase })} className="h-10 w-28 rounded-full text-xs text-white" style={glassPill}>Salvar</button>
+            <button onClick={() => onSave({ focus: Math.max(1, focus), shortBreak: Math.max(1, shortBreak), longBreak: Math.max(1, longBreak), phrase, mode })} className="h-10 w-28 rounded-full text-xs text-white" style={glassPill}>Salvar</button>
           </div>
         </div>
       </div>
@@ -485,6 +522,7 @@ const AmbientPlayer = memo(function AmbientPlayer({
   fallbackSoundSrc,
   soundAutoplay,
   soundReloadSeed,
+  onClose,
 }: {
   appTab: "focus" | "tasks" | "sound" | "journal" | "settings";
   resolvedCustomSound: { type: "audio" | "iframe"; src: string } | null;
@@ -492,15 +530,18 @@ const AmbientPlayer = memo(function AmbientPlayer({
   fallbackSoundSrc: string;
   soundAutoplay: boolean;
   soundReloadSeed: number;
+  onClose: () => void;
 }) {
   const docked = appTab !== "sound";
+  const dragHandleRef = useRef<HTMLButtonElement | null>(null);
   const playerRef = useRef<HTMLDivElement | null>(null);
   const dragRafRef = useRef<number | null>(null);
   const pendingPositionRef = useRef<{ x: number; y: number } | null>(null);
-  const dragStateRef = useRef<{ offsetX: number; offsetY: number; active: boolean }>({
+  const dragStateRef = useRef<{ offsetX: number; offsetY: number; active: boolean; pointerId: number | null }>({
     offsetX: 0,
     offsetY: 0,
     active: false,
+    pointerId: null,
   });
   const [isDragging, setIsDragging] = useState(false);
   const [dockedPosition, setDockedPosition] = useState<{ x: number; y: number }>({ x: 12, y: 72 });
@@ -540,31 +581,51 @@ const AmbientPlayer = memo(function AmbientPlayer({
 
   const endDrag = useCallback(() => {
     dragStateRef.current.active = false;
+    dragStateRef.current.pointerId = null;
     setIsDragging(false);
   }, []);
 
-  const onPointerMoveDrag = useCallback((moveEvent: React.PointerEvent<HTMLButtonElement>) => {
-    if (!dragStateRef.current.active || !playerRef.current) return;
+  useEffect(() => {
+    const onPointerMove = (moveEvent: PointerEvent) => {
+      if (!dragStateRef.current.active || !playerRef.current) return;
+      if (dragStateRef.current.pointerId !== null && moveEvent.pointerId !== dragStateRef.current.pointerId) return;
 
-    const width = playerRef.current.offsetWidth;
-    const height = playerRef.current.offsetHeight;
-    const maxX = Math.max(0, window.innerWidth - width);
-    const maxY = Math.max(0, window.innerHeight - height);
+      const viewportW = document.documentElement.clientWidth;
+      const viewportH = document.documentElement.clientHeight;
+      const width = playerRef.current.offsetWidth;
+      const height = playerRef.current.offsetHeight;
+      const maxX = Math.max(0, viewportW - width);
+      const maxY = Math.max(0, viewportH - height);
 
-    const nextX = Math.max(0, Math.min(maxX, moveEvent.clientX - dragStateRef.current.offsetX));
-    const nextY = Math.max(0, Math.min(maxY, moveEvent.clientY - dragStateRef.current.offsetY));
-    pendingPositionRef.current = { x: nextX, y: nextY };
+      const nextX = Math.max(0, Math.min(maxX, moveEvent.clientX - dragStateRef.current.offsetX));
+      const nextY = Math.max(0, Math.min(maxY, moveEvent.clientY - dragStateRef.current.offsetY));
+      pendingPositionRef.current = { x: nextX, y: nextY };
 
-    if (dragRafRef.current !== null) return;
+      if (dragRafRef.current !== null) return;
 
-    dragRafRef.current = window.requestAnimationFrame(() => {
-      if (pendingPositionRef.current) {
-        setDockedPosition(pendingPositionRef.current);
-      }
-      pendingPositionRef.current = null;
-      dragRafRef.current = null;
-    });
-  }, []);
+      dragRafRef.current = window.requestAnimationFrame(() => {
+        if (pendingPositionRef.current) {
+          setDockedPosition(pendingPositionRef.current);
+        }
+        pendingPositionRef.current = null;
+        dragRafRef.current = null;
+      });
+    };
+
+    const onPointerUp = () => {
+      endDrag();
+    };
+
+    window.addEventListener("pointermove", onPointerMove);
+    window.addEventListener("pointerup", onPointerUp);
+    window.addEventListener("pointercancel", onPointerUp);
+
+    return () => {
+      window.removeEventListener("pointermove", onPointerMove);
+      window.removeEventListener("pointerup", onPointerUp);
+      window.removeEventListener("pointercancel", onPointerUp);
+    };
+  }, [endDrag]);
 
   const onPointerDownDrag = useCallback((event: React.PointerEvent<HTMLButtonElement>) => {
     if (!docked || !playerRef.current) return;
@@ -577,9 +638,17 @@ const AmbientPlayer = memo(function AmbientPlayer({
       active: true,
       offsetX: event.clientX - rect.left,
       offsetY: event.clientY - rect.top,
+      pointerId: event.pointerId,
     };
     setIsDragging(true);
   }, [docked]);
+
+  const onPointerUpDrag = useCallback((event: React.PointerEvent<HTMLButtonElement>) => {
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+    endDrag();
+  }, [endDrag]);
 
   return (
     <div
@@ -601,24 +670,38 @@ const AmbientPlayer = memo(function AmbientPlayer({
       }
     >
       {docked && (
-        <button
-          type="button"
-          onPointerDown={onPointerDownDrag}
-          onPointerMove={onPointerMoveDrag}
-          onPointerUp={endDrag}
-          onPointerCancel={endDrag}
-          onLostPointerCapture={endDrag}
-          className="w-full px-3 py-1.5 text-left font-mono text-[0.65rem] tracking-[0.08em] uppercase"
+        <div
+          className="flex items-center justify-between gap-2 border-b px-2.5 py-1.5"
           style={{
-            borderBottom: "1px solid rgba(255,255,255,0.12)",
+            borderBottomColor: "rgba(255,255,255,0.12)",
             background: "rgba(255,255,255,0.05)",
-            color: "rgba(255,255,255,0.62)",
-            cursor: isDragging ? "grabbing" : "grab",
-            touchAction: "none",
           }}
         >
-          mover player
-        </button>
+          <button
+            ref={dragHandleRef}
+            type="button"
+            onPointerDown={onPointerDownDrag}
+            onPointerUp={onPointerUpDrag}
+            onPointerCancel={onPointerUpDrag}
+            onLostPointerCapture={endDrag}
+            className="flex-1 text-left font-mono text-[0.65rem] tracking-[0.08em] uppercase"
+            style={{
+              color: "rgba(255,255,255,0.62)",
+              cursor: isDragging ? "grabbing" : "grab",
+              touchAction: "none",
+            }}
+          >
+            mover player
+          </button>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-full px-2 py-0.5 text-[0.62rem] font-mono uppercase"
+            style={{ ...glassGhost, color: "rgba(255,255,255,0.64)" }}
+          >
+            fechar
+          </button>
+        </div>
       )}
       {resolvedCustomSound?.type === "audio" ? (
         <audio
@@ -652,6 +735,7 @@ const AmbientPlayer = memo(function AmbientPlayer({
 export default function Home() {
   const {
     appTab,
+    timerSystemMode,
     timerMode,
     timerDurations,
     secondsLeft,
@@ -666,6 +750,7 @@ export default function Home() {
     currentTrackId,
     customSoundUrl,
     setTab,
+    setTimerSystemMode,
     setTimerMode,
     updateTimerDurations,
     setCustomMotivationalPhrase,
@@ -681,6 +766,7 @@ export default function Home() {
     setTrack,
     setCustomSoundUrl,
     resetAnalytics,
+    logFocusMinutes,
   } = useStudydimStore();
 
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -692,6 +778,9 @@ export default function Home() {
   const [soundInput, setSoundInput] = useState(customSoundUrl);
   const [soundAutoplay, setSoundAutoplay] = useState(true);
   const [soundReloadSeed, setSoundReloadSeed] = useState(0);
+  const [chronoElapsedSeconds, setChronoElapsedSeconds] = useState(0);
+  const [chronoRunning, setChronoRunning] = useState(false);
+  const [chronoBreakRemaining, setChronoBreakRemaining] = useState(0);
 
   const [quoteIndex, setQuoteIndex] = useState(0);
   const [quoteVisible, setQuoteVisible] = useState(true);
@@ -718,9 +807,10 @@ export default function Home() {
 
   const previousSwitchRef = useRef(modeSwitchedAt);
   const lastTickAtRef = useRef<number | null>(null);
+  const chronoLastTickAtRef = useRef<number | null>(null);
 
   const syncTimerWithElapsed = useCallback(() => {
-    if (!timerRunning) return;
+    if (!timerRunning || timerSystemMode !== "pomodoro") return;
 
     const now = Date.now();
     if (lastTickAtRef.current === null) {
@@ -733,10 +823,10 @@ export default function Home() {
 
     lastTickAtRef.current += elapsedSeconds * 1000;
     advanceTimerBy(elapsedSeconds);
-  }, [timerRunning, advanceTimerBy]);
+  }, [timerRunning, advanceTimerBy, timerSystemMode]);
 
   useEffect(() => {
-    if (!timerRunning) {
+    if (!timerRunning || timerSystemMode !== "pomodoro") {
       lastTickAtRef.current = null;
       return;
     }
@@ -758,7 +848,67 @@ export default function Home() {
       window.removeEventListener("focus", syncTimerWithElapsed);
       document.removeEventListener("visibilitychange", onVisibilityChange);
     };
-  }, [timerRunning, syncTimerWithElapsed]);
+  }, [timerRunning, syncTimerWithElapsed, timerSystemMode]);
+
+  const syncChronometerWithElapsed = useCallback(() => {
+    if (timerSystemMode !== "chronometer") return;
+    if (!chronoRunning && chronoBreakRemaining <= 0) return;
+
+    const now = Date.now();
+    if (chronoLastTickAtRef.current === null) {
+      chronoLastTickAtRef.current = now;
+      return;
+    }
+
+    const elapsedSeconds = Math.floor((now - chronoLastTickAtRef.current) / 1000);
+    if (elapsedSeconds <= 0) return;
+    chronoLastTickAtRef.current += elapsedSeconds * 1000;
+
+    if (chronoBreakRemaining > 0) {
+      setChronoBreakRemaining((value) => {
+        const next = Math.max(0, value - elapsedSeconds);
+        if (value > 0 && next === 0) {
+          setChronoRunning(true);
+        }
+        return next;
+      });
+      return;
+    }
+
+    if (chronoRunning) {
+      setChronoElapsedSeconds((value) => value + elapsedSeconds);
+    }
+  }, [chronoBreakRemaining, chronoRunning, timerSystemMode]);
+
+  useEffect(() => {
+    if (timerSystemMode !== "chronometer") {
+      chronoLastTickAtRef.current = null;
+      return;
+    }
+
+    if (!chronoRunning && chronoBreakRemaining <= 0) {
+      chronoLastTickAtRef.current = null;
+      return;
+    }
+
+    chronoLastTickAtRef.current = Date.now();
+    const id = window.setInterval(syncChronometerWithElapsed, 1000);
+
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        syncChronometerWithElapsed();
+      }
+    };
+
+    window.addEventListener("focus", syncChronometerWithElapsed);
+    document.addEventListener("visibilitychange", onVisibilityChange);
+
+    return () => {
+      window.clearInterval(id);
+      window.removeEventListener("focus", syncChronometerWithElapsed);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+    };
+  }, [chronoBreakRemaining, chronoRunning, syncChronometerWithElapsed, timerSystemMode]);
 
   useEffect(() => {
     if (!modeSwitchedAt || modeSwitchedAt === previousSwitchRef.current) return;
@@ -861,6 +1011,9 @@ export default function Home() {
 
   const timerButtonClass = "w-full rounded-full px-3 py-2 sm:px-4 sm:py-1.5 text-xs uppercase tracking-[0.08em] font-mono transition-all duration-200";
 
+  const isChronoOnBreak = timerSystemMode === "chronometer" && chronoBreakRemaining > 0;
+  const chronometerDisplay = isChronoOnBreak ? formatTimer(chronoBreakRemaining) : formatChronometer(chronoElapsedSeconds);
+
   return (
     <main className="relative w-full flex flex-col p-4 md:p-6 pb-28 sm:pb-36" style={{ background: "#08080f", minHeight: "100dvh", overflowY: "auto", overflowX: "hidden" }}>
       <div className="pointer-events-none absolute inset-0" style={{ background: "radial-gradient(ellipse at 50% 0%, rgba(82,88,170,0.07) 0%, transparent 65%)" }} />
@@ -878,28 +1031,72 @@ export default function Home() {
         </header>
 
         <section className="flex-1 flex flex-col items-center justify-center gap-6 md:gap-8 pt-24 sm:pt-14 pb-2">
-          <div className="grid grid-cols-3 gap-1.5 w-full max-w-[420px]">
-            {TIMER_MODES.map((modeItem) => {
-              const isActive = timerMode === modeItem.id;
-              return (
-                <button key={modeItem.id} onClick={() => setTimerMode(modeItem.id)} className={timerButtonClass} style={{ ...(isActive ? { ...glassPill, ...glassActive } : glassPill), color: isActive ? "rgba(255,255,255,0.92)" : "rgba(255,255,255,0.58)" }}>
-                  {modeItem.label}
-                </button>
-              );
-            })}
-          </div>
+          {timerSystemMode === "pomodoro" ? (
+            <div className="grid grid-cols-3 gap-1.5 w-full max-w-[420px]">
+              {TIMER_MODES.map((modeItem) => {
+                const isActive = timerMode === modeItem.id;
+                return (
+                  <button key={modeItem.id} onClick={() => setTimerMode(modeItem.id)} className={timerButtonClass} style={{ ...(isActive ? { ...glassPill, ...glassActive } : glassPill), color: isActive ? "rgba(255,255,255,0.92)" : "rgba(255,255,255,0.58)" }}>
+                    {modeItem.label}
+                  </button>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="w-full max-w-[420px] text-center">
+              <p className="label" style={{ color: "rgba(255,255,255,0.36)" }}>{isChronoOnBreak ? "Short Break" : "Cronometro"}</p>
+            </div>
+          )}
 
           <div className="w-full text-center select-none">
             <p className="font-mono font-black leading-none tracking-tight text-white text-[10vh] sm:text-[12vh] md:text-[13vh]" style={{ letterSpacing: "-0.04em", textShadow: "0 0 80px rgba(255,255,255,0.08)" }}>
-              {formatTimer(secondsLeft)}
+              {timerSystemMode === "pomodoro" ? formatTimer(secondsLeft) : chronometerDisplay}
             </p>
           </div>
 
-          <div className="grid grid-cols-3 gap-1.5 w-full max-w-[420px]">
-            <button onClick={toggleTimer} className={timerButtonClass} style={{ ...glassPill, color: "rgba(255,255,255,0.92)" }}>{timerRunning ? "Pausar" : "Iniciar"}</button>
-            <button onClick={resetTimer} className={timerButtonClass} style={{ ...glassPill, color: "rgba(255,255,255,0.92)" }}>Reset</button>
-            <button onClick={skipCycle} className={timerButtonClass} style={{ ...glassPill, color: "rgba(255,255,255,0.92)" }}>Proximo</button>
-          </div>
+          {timerSystemMode === "pomodoro" ? (
+            <div className="grid grid-cols-3 gap-1.5 w-full max-w-[420px]">
+              <button onClick={toggleTimer} className={timerButtonClass} style={{ ...glassPill, color: "rgba(255,255,255,0.92)" }}>{timerRunning ? "Pausar" : "Iniciar"}</button>
+              <button onClick={resetTimer} className={timerButtonClass} style={{ ...glassPill, color: "rgba(255,255,255,0.92)" }}>Reset</button>
+              <button onClick={skipCycle} className={timerButtonClass} style={{ ...glassPill, color: "rgba(255,255,255,0.92)" }}>Proximo</button>
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 gap-1.5 w-full max-w-[420px]">
+              <button
+                onClick={() => {
+                  if (chronoBreakRemaining > 0) return;
+                  if (chronoRunning) {
+                    setChronoRunning(false);
+                    setChronoBreakRemaining(timerDurations.shortBreak);
+                    return;
+                  }
+                  setChronoRunning(true);
+                }}
+                disabled={chronoBreakRemaining > 0}
+                className={timerButtonClass}
+                style={{
+                  ...glassPill,
+                  color: chronoBreakRemaining > 0 ? "rgba(255,255,255,0.35)" : "rgba(255,255,255,0.92)",
+                }}
+              >
+                {chronoBreakRemaining > 0 ? `Intervalo ${formatTimer(chronoBreakRemaining)}` : chronoRunning ? "Pausar" : "Iniciar"}
+              </button>
+              <button
+                onClick={() => {
+                  setChronoRunning(false);
+                  setChronoBreakRemaining(0);
+                  if (chronoElapsedSeconds > 0) {
+                    logFocusMinutes(Math.max(1, Math.round(chronoElapsedSeconds / 60)));
+                  }
+                  setChronoElapsedSeconds(0);
+                }}
+                className={timerButtonClass}
+                style={{ ...glassPill, color: "rgba(255,255,255,0.92)" }}
+              >
+                Encerrar
+              </button>
+            </div>
+          )}
 
           <div className="text-center">
             <p className="label" style={{ color: "rgba(255,255,255,0.3)" }}>Ciclos</p>
@@ -1110,6 +1307,11 @@ export default function Home() {
               fallbackSoundSrc={fallbackSoundSrc}
               soundAutoplay={soundAutoplay}
               soundReloadSeed={soundReloadSeed}
+              onClose={() => {
+                setTrack("");
+                setCustomSoundUrl("");
+                setSoundInput("");
+              }}
             />
           )}
         </section>
@@ -1147,6 +1349,7 @@ export default function Home() {
           focusMinutes={Math.round(timerDurations.focus / 60)}
           shortBreakMinutes={Math.round(timerDurations.shortBreak / 60)}
           longBreakMinutes={Math.round(timerDurations.longBreak / 60)}
+          timerSystemMode={timerSystemMode}
           motivationalPhrase={customMotivationalPhrase}
           onResetHeatmaps={() => {
             resetAnalytics();
@@ -1154,6 +1357,11 @@ export default function Home() {
           onSave={(payload) => {
             updateTimerDurations({ focus: payload.focus, shortBreak: payload.shortBreak, longBreak: payload.longBreak });
             setCustomMotivationalPhrase(payload.phrase);
+            if (payload.mode !== "chronometer") {
+              setChronoRunning(false);
+              setChronoBreakRemaining(0);
+            }
+            setTimerSystemMode(payload.mode);
             setSettingsOpen(false);
           }}
         />

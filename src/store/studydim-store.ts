@@ -21,6 +21,7 @@ import type {
 } from "@/types/domain";
 
 type AppTab = "focus" | "tasks" | "sound" | "journal" | "settings";
+type TimerSystemMode = "pomodoro" | "chronometer";
 
 const FOCUS_DURATION = 25 * 60;
 const SHORT_BREAK_DURATION = 5 * 60;
@@ -51,6 +52,7 @@ const isoDaysFromNow = (days: number): string => {
 
 interface StudydimState {
   appTab: AppTab;
+  timerSystemMode: TimerSystemMode;
   timerMode: TimerMode;
   timerDurations: {
     focus: number;
@@ -78,6 +80,7 @@ interface StudydimState {
   customSoundUrl: string;
 
   setTab: (tab: AppTab) => void;
+  setTimerSystemMode: (mode: TimerSystemMode) => void;
   setTimerMode: (mode: TimerMode) => void;
   updateTimerDurations: (durationsInMinutes: {
     focus: number;
@@ -98,6 +101,7 @@ interface StudydimState {
   toggleTask: (taskId: string) => void;
   removeTask: (taskId: string) => void;
   rolloverTasksForDate: (dateKey: string) => void;
+  logFocusMinutes: (minutes: number) => void;
 
   setTrack: (youtubeId: string) => void;
   setCustomSoundUrl: (url: string) => void;
@@ -113,6 +117,7 @@ export const useStudydimStore = create<StudydimState>()(
   persist(
     (set, get) => ({
       appTab: "focus",
+      timerSystemMode: "pomodoro",
       timerMode: "focus",
       timerDurations: DEFAULT_TIMER_DURATIONS,
       secondsLeft: FOCUS_DURATION,
@@ -136,6 +141,12 @@ export const useStudydimStore = create<StudydimState>()(
       customSoundUrl: "",
 
       setTab: (tab) => set({ appTab: tab }),
+
+      setTimerSystemMode: (mode) =>
+        set({
+          timerSystemMode: mode,
+          timerRunning: false,
+        }),
 
       setTimerMode: (mode) =>
         set((state) => ({
@@ -335,6 +346,25 @@ export const useStudydimStore = create<StudydimState>()(
           };
         }),
 
+      logFocusMinutes: (minutes) =>
+        set((state) => {
+          const safeMinutes = Math.max(0, Math.round(minutes));
+          if (safeMinutes <= 0) return state;
+
+          return {
+            studyLogs: [
+              {
+                id: `log-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+                date: new Date().toISOString(),
+                minutes: safeMinutes,
+                focusScore: 85,
+                mode: "focus",
+              },
+              ...state.studyLogs,
+            ].slice(0, 180),
+          };
+        }),
+
       setTrack: (youtubeId) => set({ currentTrackId: youtubeId }),
 
       setCustomSoundUrl: (url) => set({ customSoundUrl: url.trim() }),
@@ -436,6 +466,7 @@ export const useStudydimStore = create<StudydimState>()(
       storage: createJSONStorage(() => localStorage),
       partialize: (state) => ({
         appTab: state.appTab,
+        timerSystemMode: state.timerSystemMode,
         timerMode: state.timerMode,
         timerDurations: state.timerDurations,
         secondsLeft: state.secondsLeft,
