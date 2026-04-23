@@ -495,11 +495,14 @@ const AmbientPlayer = memo(function AmbientPlayer({
 }) {
   const docked = appTab !== "sound";
   const playerRef = useRef<HTMLDivElement | null>(null);
+  const dragRafRef = useRef<number | null>(null);
+  const pendingPositionRef = useRef<{ x: number; y: number } | null>(null);
   const dragStateRef = useRef<{ offsetX: number; offsetY: number; active: boolean }>({
     offsetX: 0,
     offsetY: 0,
     active: false,
   });
+  const [isDragging, setIsDragging] = useState(false);
   const [dockedPosition, setDockedPosition] = useState<{ x: number; y: number }>({ x: 12, y: 72 });
 
   useEffect(() => {
@@ -512,8 +515,62 @@ const AmbientPlayer = memo(function AmbientPlayer({
     });
   }, [docked]);
 
+  useEffect(() => {
+    if (!isDragging) return;
+
+    const previousUserSelect = document.body.style.userSelect;
+    const previousCursor = document.body.style.cursor;
+    document.body.style.userSelect = "none";
+    document.body.style.cursor = "grabbing";
+
+    return () => {
+      document.body.style.userSelect = previousUserSelect;
+      document.body.style.cursor = previousCursor;
+    };
+  }, [isDragging]);
+
+  useEffect(
+    () => () => {
+      if (dragRafRef.current !== null) {
+        window.cancelAnimationFrame(dragRafRef.current);
+      }
+    },
+    [],
+  );
+
+  const endDrag = useCallback(() => {
+    dragStateRef.current.active = false;
+    setIsDragging(false);
+  }, []);
+
+  const onPointerMoveDrag = useCallback((moveEvent: React.PointerEvent<HTMLButtonElement>) => {
+    if (!dragStateRef.current.active || !playerRef.current) return;
+
+    const width = playerRef.current.offsetWidth;
+    const height = playerRef.current.offsetHeight;
+    const maxX = Math.max(0, window.innerWidth - width);
+    const maxY = Math.max(0, window.innerHeight - height);
+
+    const nextX = Math.max(0, Math.min(maxX, moveEvent.clientX - dragStateRef.current.offsetX));
+    const nextY = Math.max(0, Math.min(maxY, moveEvent.clientY - dragStateRef.current.offsetY));
+    pendingPositionRef.current = { x: nextX, y: nextY };
+
+    if (dragRafRef.current !== null) return;
+
+    dragRafRef.current = window.requestAnimationFrame(() => {
+      if (pendingPositionRef.current) {
+        setDockedPosition(pendingPositionRef.current);
+      }
+      pendingPositionRef.current = null;
+      dragRafRef.current = null;
+    });
+  }, []);
+
   const onPointerDownDrag = useCallback((event: React.PointerEvent<HTMLButtonElement>) => {
     if (!docked || !playerRef.current) return;
+
+    event.preventDefault();
+    event.currentTarget.setPointerCapture(event.pointerId);
 
     const rect = playerRef.current.getBoundingClientRect();
     dragStateRef.current = {
@@ -521,28 +578,7 @@ const AmbientPlayer = memo(function AmbientPlayer({
       offsetX: event.clientX - rect.left,
       offsetY: event.clientY - rect.top,
     };
-
-    const onPointerMove = (moveEvent: PointerEvent) => {
-      if (!dragStateRef.current.active) return;
-
-      const width = playerRef.current?.offsetWidth ?? 240;
-      const height = playerRef.current?.offsetHeight ?? 180;
-      const maxX = Math.max(8, window.innerWidth - width - 8);
-      const maxY = Math.max(8, window.innerHeight - height - 8);
-
-      const nextX = Math.max(8, Math.min(maxX, moveEvent.clientX - dragStateRef.current.offsetX));
-      const nextY = Math.max(8, Math.min(maxY, moveEvent.clientY - dragStateRef.current.offsetY));
-      setDockedPosition({ x: nextX, y: nextY });
-    };
-
-    const onPointerUp = () => {
-      dragStateRef.current.active = false;
-      window.removeEventListener("pointermove", onPointerMove);
-      window.removeEventListener("pointerup", onPointerUp);
-    };
-
-    window.addEventListener("pointermove", onPointerMove);
-    window.addEventListener("pointerup", onPointerUp);
+    setIsDragging(true);
   }, [docked]);
 
   return (
@@ -568,12 +604,16 @@ const AmbientPlayer = memo(function AmbientPlayer({
         <button
           type="button"
           onPointerDown={onPointerDownDrag}
+          onPointerMove={onPointerMoveDrag}
+          onPointerUp={endDrag}
+          onPointerCancel={endDrag}
+          onLostPointerCapture={endDrag}
           className="w-full px-3 py-1.5 text-left font-mono text-[0.65rem] tracking-[0.08em] uppercase"
           style={{
             borderBottom: "1px solid rgba(255,255,255,0.12)",
             background: "rgba(255,255,255,0.05)",
             color: "rgba(255,255,255,0.62)",
-            cursor: "grab",
+            cursor: isDragging ? "grabbing" : "grab",
             touchAction: "none",
           }}
         >
@@ -744,7 +784,7 @@ export default function Home() {
         setQuoteIndex((value) => (value + 1) % MOTIVATIONAL_QUOTES.length);
         setQuoteVisible(true);
       }, 350);
-    }, 5000);
+    }, 10000);
     return () => window.clearInterval(interval);
   }, [customMotivationalPhrase]);
 
