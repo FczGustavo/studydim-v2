@@ -351,17 +351,16 @@ export const useStudydimStore = create<StudydimState>()(
           const safeMinutes = Math.max(0, Math.round(minutes));
           if (safeMinutes <= 0) return state;
 
+          const newLog: StudyLog = {
+            id: `log-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+            date: new Date().toISOString(),
+            minutes: safeMinutes,
+            focusScore: 85,
+            mode: "focus",
+          };
+
           return {
-            studyLogs: [
-              {
-                id: `log-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-                date: new Date().toISOString(),
-                minutes: safeMinutes,
-                focusScore: 85,
-                mode: "focus",
-              },
-              ...state.studyLogs,
-            ].slice(0, 180),
+            studyLogs: [newLog, ...state.studyLogs].slice(0, 180),
           };
         }),
 
