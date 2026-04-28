@@ -4,6 +4,7 @@ import {
   ambientTracks,
   initialCircles,
   initialJournalEntries,
+  initialReviewBlocks,
   initialStudyLogs,
   initialTasks,
   initialTopics,
@@ -13,6 +14,10 @@ import type {
   AmbientTrack,
   ExtractedSchedule,
   JournalEntry,
+  ReviewBlock,
+  ReviewCheckConfig,
+  ReviewFront,
+  ReviewSubject,
   StudyCircle,
   StudyLog,
   StudyTopic,
@@ -20,7 +25,7 @@ import type {
   TimerMode,
 } from "@/types/domain";
 
-type AppTab = "focus" | "tasks" | "sound" | "journal" | "settings";
+type AppTab = "focus" | "tasks" | "sound" | "journal" | "review" | "settings";
 type TimerSystemMode = "pomodoro" | "chronometer";
 
 const FOCUS_DURATION = 25 * 60;
@@ -50,6 +55,88 @@ const isoDaysFromNow = (days: number): string => {
   return date.toISOString();
 };
 
+const DEFAULT_REVIEW_CHECK_CONFIG: ReviewCheckConfig = {
+  weekly: 6,
+  biweekly: 3,
+  monthly: 1,
+};
+
+const clampChecklistCount = (value: number): number =>
+  Math.max(1, Math.min(12, Math.round(value)));
+
+const normalizeReviewCheckConfig = (
+  config?: Partial<ReviewCheckConfig> | null,
+): ReviewCheckConfig => ({
+  weekly: clampChecklistCount(config?.weekly ?? DEFAULT_REVIEW_CHECK_CONFIG.weekly),
+  biweekly: clampChecklistCount(config?.biweekly ?? DEFAULT_REVIEW_CHECK_CONFIG.biweekly),
+  monthly: clampChecklistCount(config?.monthly ?? DEFAULT_REVIEW_CHECK_CONFIG.monthly),
+});
+
+const resizeChecklist = (values: boolean[] | undefined, size: number): boolean[] => {
+  const source = Array.isArray(values) ? values : [];
+  return Array.from({ length: size }, (_, index) => Boolean(source[index]));
+};
+
+const normalizeFrontChecks = (
+  checks: ReviewFront["checks"] | { weekly?: boolean | boolean[]; biweekly?: boolean | boolean[]; monthly?: boolean | boolean[] } | undefined,
+  config: ReviewCheckConfig,
+): ReviewFront["checks"] => {
+  const toArray = (value: boolean | boolean[] | undefined): boolean[] => {
+    if (Array.isArray(value)) return value.map(Boolean);
+    if (typeof value === "boolean") return [value];
+    return [];
+  };
+
+  return {
+    weekly: resizeChecklist(toArray(checks?.weekly), config.weekly),
+    biweekly: resizeChecklist(toArray(checks?.biweekly), config.biweekly),
+    monthly: resizeChecklist(toArray(checks?.monthly), config.monthly),
+  };
+};
+
+const ensureTopicSubject = (subjects: ReviewSubject[] | undefined, blockId: string): ReviewSubject => {
+  if (subjects?.[0]) {
+    return {
+      ...subjects[0],
+      name: "Topics",
+      order: 0,
+      fronts: [...subjects[0].fronts],
+    };
+  }
+
+  return {
+    id: `topic-subj-${blockId}`,
+    name: "Topics",
+    color: "#3B82F6",
+    fronts: [],
+    order: 0,
+  };
+};
+
+const normalizeReviewBlocks = (
+  reviewBlocks: ReviewBlock[] | undefined,
+  checkConfig: ReviewCheckConfig,
+): ReviewBlock[] => {
+  if (!Array.isArray(reviewBlocks)) return initialReviewBlocks;
+
+  return reviewBlocks.map((block, blockIndex) => {
+    const combinedFronts = (block.subjects ?? []).flatMap((subject) => subject.fronts ?? []);
+    const topicSubject = ensureTopicSubject(block.subjects, block.id);
+
+    topicSubject.fronts = combinedFronts.map((front, frontIndex) => ({
+      ...front,
+      id: front.id || `front-${block.id}-${frontIndex}`,
+      checks: normalizeFrontChecks(front.checks, checkConfig),
+    }));
+
+    return {
+      ...block,
+      order: typeof block.order === "number" ? block.order : blockIndex,
+      subjects: [{ ...topicSubject, order: 0 }],
+    };
+  });
+};
+
 interface StudydimState {
   appTab: AppTab;
   timerSystemMode: TimerSystemMode;
@@ -74,6 +161,8 @@ interface StudydimState {
   extractedSchedules: ExtractedSchedule[];
   journalEntries: JournalEntry[];
   circles: StudyCircle[];
+  reviewBlocks: ReviewBlock[];
+  reviewCheckConfig: ReviewCheckConfig;
 
   ambientTracks: AmbientTrack[];
   currentTrackId: string;
@@ -111,6 +200,20 @@ interface StudydimState {
   completeRecall: (topicId: string) => void;
 
   simulateScheduleOCR: (rawText: string) => void;
+
+  addReviewBlock: () => void;
+  removeReviewBlock: (blockId: string) => void;
+  updateReviewBlockName: (blockId: string, name: string) => void;
+  setReviewCheckConfig: (config: ReviewCheckConfig) => void;
+  addTopicToBlock: (blockId: string, title: string) => void;
+  removeTopicFromBlock: (blockId: string, frontId: string) => void;
+  toggleTopicCheck: (blockId: string, frontId: string, period: "weekly" | "biweekly" | "monthly", index: number) => void;
+  moveTopicInBlock: (blockId: string, fromIndex: number, toIndex: number) => void;
+  addSubjectToBlock: (blockId: string, name: string, color: string) => void;
+  removeSubjectFromBlock: (blockId: string, subjectId: string) => void;
+  addFrontToSubject: (blockId: string, subjectId: string, title: string) => void;
+  removeFrontFromSubject: (blockId: string, subjectId: string, frontId: string) => void;
+  toggleFrontCheck: (blockId: string, subjectId: string, frontId: string, period: "weekly" | "biweekly" | "monthly") => void;
 }
 
 export const useStudydimStore = create<StudydimState>()(
@@ -135,6 +238,8 @@ export const useStudydimStore = create<StudydimState>()(
       extractedSchedules: [],
       journalEntries: initialJournalEntries,
       circles: initialCircles,
+      reviewBlocks: normalizeReviewBlocks(initialReviewBlocks, DEFAULT_REVIEW_CHECK_CONFIG),
+      reviewCheckConfig: DEFAULT_REVIEW_CHECK_CONFIG,
 
       ambientTracks,
       currentTrackId: "",
@@ -459,10 +564,248 @@ export const useStudydimStore = create<StudydimState>()(
           ],
         }));
       },
+
+      addReviewBlock: () =>
+        set((state) => ({
+          reviewBlocks: [
+            ...state.reviewBlocks,
+            {
+              id: `block-${Date.now()}`,
+              name: `Block ${String(state.reviewBlocks.length + 1).padStart(2, "0")}`,
+              subjects: [],
+              createdAt: new Date().toISOString(),
+              order: state.reviewBlocks.length,
+            },
+          ],
+        })),
+
+      removeReviewBlock: (blockId) =>
+        set((state) => ({
+          reviewBlocks: state.reviewBlocks.filter((b) => b.id !== blockId),
+        })),
+
+      updateReviewBlockName: (blockId, name) =>
+        set((state) => ({
+          reviewBlocks: state.reviewBlocks.map((b) =>
+            b.id === blockId ? { ...b, name } : b,
+          ),
+        })),
+
+      setReviewCheckConfig: (config) =>
+        set((state) => {
+          const normalizedConfig = normalizeReviewCheckConfig(config);
+          return {
+            reviewCheckConfig: normalizedConfig,
+            reviewBlocks: state.reviewBlocks.map((block) => ({
+              ...block,
+              subjects: block.subjects.map((subject) => ({
+                ...subject,
+                fronts: subject.fronts.map((front) => ({
+                  ...front,
+                  checks: normalizeFrontChecks(front.checks, normalizedConfig),
+                })),
+              })),
+            })),
+          };
+        }),
+
+      addTopicToBlock: (blockId, title) => {
+        const normalizedTitle = title.trim();
+        if (!normalizedTitle) return;
+
+        set((state) => ({
+          reviewBlocks: state.reviewBlocks.map((block) => {
+            if (block.id !== blockId) return block;
+            const subject = ensureTopicSubject(block.subjects, block.id);
+            return {
+              ...block,
+              subjects: [
+                {
+                  ...subject,
+                  fronts: [
+                    ...subject.fronts,
+                    {
+                      id: `front-${Date.now()}`,
+                      title: normalizedTitle,
+                      checks: normalizeFrontChecks(undefined, state.reviewCheckConfig),
+                    },
+                  ],
+                },
+              ],
+            };
+          }),
+        }));
+      },
+
+      removeTopicFromBlock: (blockId, frontId) =>
+        set((state) => ({
+          reviewBlocks: state.reviewBlocks.map((block) => {
+            if (block.id !== blockId) return block;
+            const subject = ensureTopicSubject(block.subjects, block.id);
+            return {
+              ...block,
+              subjects: [
+                {
+                  ...subject,
+                  fronts: subject.fronts.filter((front) => front.id !== frontId),
+                },
+              ],
+            };
+          }),
+        })),
+
+      toggleTopicCheck: (blockId, frontId, period, index) =>
+        set((state) => ({
+          reviewBlocks: state.reviewBlocks.map((block) => {
+            if (block.id !== blockId) return block;
+            const subject = ensureTopicSubject(block.subjects, block.id);
+            return {
+              ...block,
+              subjects: [
+                {
+                  ...subject,
+                  fronts: subject.fronts.map((front) => {
+                    if (front.id !== frontId) return front;
+                    const nextPeriod = [...front.checks[period]];
+                    if (index < 0 || index >= nextPeriod.length) return front;
+                    nextPeriod[index] = !nextPeriod[index];
+                    return {
+                      ...front,
+                      checks: {
+                        ...front.checks,
+                        [period]: nextPeriod,
+                      },
+                    };
+                  }),
+                },
+              ],
+            };
+          }),
+        })),
+
+      moveTopicInBlock: (blockId, fromIndex, toIndex) =>
+        set((state) => ({
+          reviewBlocks: state.reviewBlocks.map((block) => {
+            if (block.id !== blockId) return block;
+            const subject = ensureTopicSubject(block.subjects, block.id);
+            const fronts = [...subject.fronts];
+            if (
+              fromIndex < 0
+              || toIndex < 0
+              || fromIndex >= fronts.length
+              || toIndex >= fronts.length
+              || fromIndex === toIndex
+            ) {
+              return { ...block, subjects: [subject] };
+            }
+            const [moved] = fronts.splice(fromIndex, 1);
+            fronts.splice(toIndex, 0, moved);
+            return {
+              ...block,
+              subjects: [{ ...subject, fronts }],
+            };
+          }),
+        })),
+
+      addSubjectToBlock: (blockId, name, color) =>
+        set((state) => ({
+          reviewBlocks: state.reviewBlocks.map((block) => {
+            if (block.id !== blockId) return block;
+            const newSubject: ReviewSubject = {
+              id: `subj-${Date.now()}`,
+              name,
+              color,
+              fronts: [],
+              order: block.subjects.length,
+            };
+            return { ...block, subjects: [...block.subjects, newSubject] };
+          }),
+        })),
+
+      removeSubjectFromBlock: (blockId, subjectId) =>
+        set((state) => ({
+          reviewBlocks: state.reviewBlocks.map((block) =>
+            block.id !== blockId
+              ? block
+              : { ...block, subjects: block.subjects.filter((s) => s.id !== subjectId) },
+          ),
+        })),
+
+      addFrontToSubject: (blockId, subjectId, title) =>
+        set((state) => ({
+          reviewBlocks: state.reviewBlocks.map((block) => {
+            if (block.id !== blockId) return block;
+            return {
+              ...block,
+              subjects: block.subjects.map((s) => {
+                if (s.id !== subjectId) return s;
+                return {
+                  ...s,
+                  fronts: [
+                    ...s.fronts,
+                    {
+                      id: `front-${Date.now()}`,
+                      title,
+                      checks: normalizeFrontChecks(undefined, state.reviewCheckConfig),
+                    },
+                  ],
+                };
+              }),
+            };
+          }),
+        })),
+
+      removeFrontFromSubject: (blockId, subjectId, frontId) =>
+        set((state) => ({
+          reviewBlocks: state.reviewBlocks.map((block) => {
+            if (block.id !== blockId) return block;
+            return {
+              ...block,
+              subjects: block.subjects.map((s) => {
+                if (s.id !== subjectId) return s;
+                return { ...s, fronts: s.fronts.filter((f) => f.id !== frontId) };
+              }),
+            };
+          }),
+        })),
+
+      toggleFrontCheck: (blockId, subjectId, frontId, period) =>
+        set((state) => ({
+          reviewBlocks: state.reviewBlocks.map((block) => {
+            if (block.id !== blockId) return block;
+            return {
+              ...block,
+              subjects: block.subjects.map((s) => {
+                if (s.id !== subjectId) return s;
+                return {
+                  ...s,
+                  fronts: s.fronts.map((f) => {
+                    if (f.id !== frontId) return f;
+                    const values = [...f.checks[period]];
+                    if (values.length > 0) values[0] = !values[0];
+                    return { ...f, checks: { ...f.checks, [period]: values } };
+                  }),
+                };
+              }),
+            };
+          }),
+        })),
     }),
     {
       name: "studydim-local-state",
+      version: 3,
       storage: createJSONStorage(() => localStorage),
+      migrate: (persistedState) => {
+        if (!persistedState || typeof persistedState !== "object") return persistedState;
+
+        const state = persistedState as StudydimState & { reviewCheckConfig?: Partial<ReviewCheckConfig> };
+        const normalizedConfig = normalizeReviewCheckConfig(state.reviewCheckConfig);
+        return {
+          ...state,
+          reviewCheckConfig: normalizedConfig,
+          reviewBlocks: normalizeReviewBlocks(state.reviewBlocks, normalizedConfig),
+        };
+      },
       partialize: (state) => ({
         appTab: state.appTab,
         timerSystemMode: state.timerSystemMode,
@@ -482,6 +825,8 @@ export const useStudydimStore = create<StudydimState>()(
         extractedSchedules: state.extractedSchedules,
         journalEntries: state.journalEntries,
         circles: state.circles,
+        reviewBlocks: state.reviewBlocks,
+        reviewCheckConfig: state.reviewCheckConfig,
         currentTrackId: state.currentTrackId,
         customSoundUrl: state.customSoundUrl,
       }),

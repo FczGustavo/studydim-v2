@@ -1,6 +1,6 @@
 ﻿"use client";
 
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { fromLocalDateKey, toLocalDateKey, toLocalDateKeyFromTimestamp } from "@/lib/date";
 import { useStudydimStore } from "@/store/studydim-store";
 import type { TimerMode } from "@/types/domain";
@@ -127,10 +127,11 @@ const MOTIVATIONAL_QUOTES = [
 
 const NAV_ITEMS = [
   { id: "focus" as const, label: "Timer", short: "Timer" },
-  { id: "tasks" as const, label: "Tarefas", short: "Tasks" },
-  { id: "sound" as const, label: "Som", short: "Som" },
-  { id: "journal" as const, label: "Diario", short: "Diario" },
-  { id: "settings" as const, label: "Configuracoes", short: "Config" },
+  { id: "tasks" as const, label: "Tasks", short: "Tasks" },
+  { id: "sound" as const, label: "Sound", short: "Sound" },
+  { id: "journal" as const, label: "Journal", short: "Journal" },
+  { id: "review" as const, label: "Review", short: "Review" },
+  { id: "settings" as const, label: "Settings", short: "Config" },
 ];
 
 const TIMER_MODES: { id: TimerMode; label: string }[] = [
@@ -430,6 +431,7 @@ function SettingsModal({
   focusMinutes,
   shortBreakMinutes,
   longBreakMinutes,
+  reviewChecklist,
   timerSystemMode,
   motivationalPhrase,
   onSave,
@@ -439,9 +441,10 @@ function SettingsModal({
   focusMinutes: number;
   shortBreakMinutes: number;
   longBreakMinutes: number;
+  reviewChecklist: { weekly: number; biweekly: number; monthly: number };
   timerSystemMode: "pomodoro" | "chronometer";
   motivationalPhrase: string;
-  onSave: (payload: { focus: number; shortBreak: number; longBreak: number; phrase: string; mode: "pomodoro" | "chronometer" }) => void;
+  onSave: (payload: { focus: number; shortBreak: number; longBreak: number; phrase: string; mode: "pomodoro" | "chronometer"; reviewChecklist: { weekly: number; biweekly: number; monthly: number } }) => void;
   onResetHeatmaps: () => void;
 }) {
   const [focus, setFocus] = useState(focusMinutes);
@@ -449,21 +452,24 @@ function SettingsModal({
   const [longBreak, setLongBreak] = useState(longBreakMinutes);
   const [phrase, setPhrase] = useState(motivationalPhrase);
   const [mode, setMode] = useState<"pomodoro" | "chronometer">(timerSystemMode);
+  const [weeklyChecks, setWeeklyChecks] = useState(reviewChecklist.weekly);
+  const [biweeklyChecks, setBiweeklyChecks] = useState(reviewChecklist.biweekly);
+  const [monthlyChecks, setMonthlyChecks] = useState(reviewChecklist.monthly);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
       <div className="absolute inset-0 bg-black/65" onClick={onClose} aria-hidden />
       <div className="relative w-full max-w-[520px] rounded-3xl p-5" style={{ ...glassPill, background: "rgba(10,10,18,0.82)" }}>
         <div className="mb-4 flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-white">Configuracoes</h2>
+          <h2 className="text-lg font-semibold text-white">Settings</h2>
           <button onClick={onClose} className="rounded-full px-3 py-1 text-xs" style={{ ...glassGhost, color: "rgba(255,255,255,0.6)" }}>
-            Fechar
+            Close
           </button>
         </div>
 
         <div className="space-y-3">
           <div>
-            <p className="mb-1 text-xs text-white/70">Modo de tempo</p>
+            <p className="mb-1 text-xs text-white/70">Timer mode</p>
             <div className="grid grid-cols-2 gap-2">
               <button
                 type="button"
@@ -479,7 +485,7 @@ function SettingsModal({
                 className="rounded-xl px-3 py-2 text-xs"
                 style={mode === "chronometer" ? { ...glassPill, ...glassActive, color: "rgba(255,255,255,0.9)" } : { ...glassGhost, color: "rgba(255,255,255,0.62)" }}
               >
-                Cronometro
+                Chronometer
               </button>
             </div>
           </div>
@@ -500,14 +506,48 @@ function SettingsModal({
           </div>
 
           <label className="block text-xs text-white/70">
-            Frase motivacional customizada
-            <input value={phrase} onChange={(e) => setPhrase(e.target.value)} placeholder="Digite para substituir as frases rotativas" className="mt-1 w-full rounded-xl px-3 py-2 text-white outline-none placeholder:text-white/30" style={glassGhost} />
+            Custom motivational phrase
+            <input value={phrase} onChange={(e) => setPhrase(e.target.value)} placeholder="Type to replace the rotating quotes" className="mt-1 w-full rounded-xl px-3 py-2 text-white outline-none placeholder:text-white/30" style={glassGhost} />
           </label>
 
+          <div className="grid grid-cols-3 gap-2">
+            <label className="text-xs text-white/70">
+              Weekly checks
+              <input type="number" min={1} max={12} value={weeklyChecks} onChange={(e) => setWeeklyChecks(Number(e.target.value))} className="mt-1 w-full rounded-xl px-3 py-2 text-white outline-none" style={glassGhost} />
+            </label>
+            <label className="text-xs text-white/70">
+              Biweekly checks
+              <input type="number" min={1} max={12} value={biweeklyChecks} onChange={(e) => setBiweeklyChecks(Number(e.target.value))} className="mt-1 w-full rounded-xl px-3 py-2 text-white outline-none" style={glassGhost} />
+            </label>
+            <label className="text-xs text-white/70">
+              Monthly checks
+              <input type="number" min={1} max={12} value={monthlyChecks} onChange={(e) => setMonthlyChecks(Number(e.target.value))} className="mt-1 w-full rounded-xl px-3 py-2 text-white outline-none" style={glassGhost} />
+            </label>
+          </div>
+
           <div className="flex flex-wrap justify-end gap-2 pt-2">
-            <button onClick={onResetHeatmaps} className="h-10 w-44 rounded-full text-xs text-white/75" style={{ ...glassGhost, borderColor: "rgba(245,120,120,0.35)" }}>Resetar mapas de calor</button>
-            <button onClick={onClose} className="h-10 w-28 rounded-full text-xs text-white/60" style={glassGhost}>Cancelar</button>
-            <button onClick={() => onSave({ focus: Math.max(1, focus), shortBreak: Math.max(1, shortBreak), longBreak: Math.max(1, longBreak), phrase, mode })} className="h-10 w-28 rounded-full text-xs text-white" style={glassPill}>Salvar</button>
+            <button onClick={onResetHeatmaps} className="h-10 w-44 rounded-full text-xs text-white/75" style={{ ...glassGhost, borderColor: "rgba(245,120,120,0.35)" }}>Reset heatmaps</button>
+            <button onClick={onClose} className="h-10 w-28 rounded-full text-xs text-white/60" style={glassGhost}>Cancel</button>
+            <button
+              onClick={() =>
+                onSave({
+                  focus: Math.max(1, focus),
+                  shortBreak: Math.max(1, shortBreak),
+                  longBreak: Math.max(1, longBreak),
+                  phrase,
+                  mode,
+                  reviewChecklist: {
+                    weekly: Math.max(1, Math.min(12, Math.round(weeklyChecks))),
+                    biweekly: Math.max(1, Math.min(12, Math.round(biweeklyChecks))),
+                    monthly: Math.max(1, Math.min(12, Math.round(monthlyChecks))),
+                  },
+                })
+              }
+              className="h-10 w-28 rounded-full text-xs text-white"
+              style={glassPill}
+            >
+              Save
+            </button>
           </div>
         </div>
       </div>
@@ -524,7 +564,7 @@ const AmbientPlayer = memo(function AmbientPlayer({
   soundReloadSeed,
   onClose,
 }: {
-  appTab: "focus" | "tasks" | "sound" | "journal" | "settings";
+  appTab: "focus" | "tasks" | "sound" | "journal" | "review" | "settings";
   resolvedCustomSound: { type: "audio" | "iframe"; src: string } | null;
   customSoundSrc: string;
   fallbackSoundSrc: string;
@@ -767,6 +807,16 @@ export default function Home() {
     setCustomSoundUrl,
     resetAnalytics,
     logFocusMinutes,
+    reviewBlocks,
+    reviewCheckConfig,
+    addReviewBlock,
+    removeReviewBlock,
+    updateReviewBlockName,
+    setReviewCheckConfig,
+    addTopicToBlock,
+    removeTopicFromBlock,
+    toggleTopicCheck,
+    moveTopicInBlock,
   } = useStudydimStore();
 
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -790,6 +840,11 @@ export default function Home() {
     return new Date(now.getFullYear(), now.getMonth(), 1);
   });
   const [selectedDateKey, setSelectedDateKey] = useState<string>(() => toLocalDateKey(new Date()));
+
+  // Review tab states
+  const [reviewBlockInputs, setReviewBlockInputs] = useState<Record<string, { topic: string }>>({});
+  const [editingBlockId, setEditingBlockId] = useState<string | null>(null);
+  const [dragTopicId, setDragTopicId] = useState<string | null>(null);
 
   // Reactive today — updates exactly at midnight without page reload
   const [todayKey, setTodayKey] = useState(() => toLocalDateKey(new Date()));
@@ -1020,17 +1075,19 @@ export default function Home() {
 
 
       <div className="relative z-10 flex flex-col flex-1">
-        <header className="absolute inset-x-0 top-0 z-10">
-          <div className="absolute left-4 top-4 flex flex-col items-start gap-0.5 sm:left-5 sm:top-5">
-            <p className="label header-label m-0 leading-none" style={{ color: "rgba(255,255,255,0.45)" }}>Studydim</p>
-            <p className="label header-date m-0 leading-none" style={{ color: "rgba(255,255,255,0.22)" }}>{dateLabel}</p>
-          </div>
-          <div className="absolute right-4 top-4 max-w-[45vw] text-right sm:right-5 sm:top-5 sm:max-w-[360px]" style={{ opacity: quoteVisible ? 1 : 0.2, transition: "opacity 350ms ease" }}>
-            <p className="label header-quote normal-case tracking-normal m-0 leading-none" style={{ color: "rgba(255,255,255,0.36)" }}>{displayedQuote}</p>
-          </div>
-        </header>
+        {appTab !== "review" && (
+          <header className="absolute inset-x-0 top-0 z-10">
+            <div className="absolute left-4 top-4 flex flex-col items-start gap-0.5 sm:left-5 sm:top-5">
+              <p className="label header-label m-0 leading-none" style={{ color: "rgba(255,255,255,0.45)" }}>Studydim</p>
+              <p className="label header-date m-0 leading-none" style={{ color: "rgba(255,255,255,0.22)" }}>{dateLabel}</p>
+            </div>
+            <div className="absolute right-4 top-4 max-w-[45vw] text-right sm:right-5 sm:top-5 sm:max-w-[360px]" style={{ opacity: quoteVisible ? 1 : 0.2, transition: "opacity 350ms ease" }}>
+              <p className="label header-quote normal-case tracking-normal m-0 leading-none" style={{ color: "rgba(255,255,255,0.36)" }}>{displayedQuote}</p>
+            </div>
+          </header>
+        )}
 
-        <section className="flex-1 flex flex-col items-center justify-center gap-6 md:gap-8 pt-24 sm:pt-14 pb-2">
+        <section className="flex-1 flex flex-col items-center justify-center gap-6 md:gap-8 pt-24 sm:pt-14 pb-2" style={{ display: appTab === "review" ? "none" : undefined }}>
           {timerSystemMode === "pomodoro" ? (
             <div className="grid grid-cols-3 gap-1.5 w-full max-w-[420px]">
               {TIMER_MODES.map((modeItem) => {
@@ -1044,7 +1101,7 @@ export default function Home() {
             </div>
           ) : (
             <div className="w-full max-w-[420px] text-center">
-              <p className="label" style={{ color: "rgba(255,255,255,0.36)" }}>{isChronoOnBreak ? "Short Break" : "Cronometro"}</p>
+              <p className="label" style={{ color: "rgba(255,255,255,0.36)" }}>{isChronoOnBreak ? "Short Break" : "Chronometer"}</p>
             </div>
           )}
 
@@ -1056,9 +1113,9 @@ export default function Home() {
 
           {timerSystemMode === "pomodoro" ? (
             <div className="grid grid-cols-3 gap-1.5 w-full max-w-[420px]">
-              <button onClick={toggleTimer} className={timerButtonClass} style={{ ...glassPill, color: "rgba(255,255,255,0.92)" }}>{timerRunning ? "Pausar" : "Iniciar"}</button>
+              <button onClick={toggleTimer} className={timerButtonClass} style={{ ...glassPill, color: "rgba(255,255,255,0.92)" }}>{timerRunning ? "Pause" : "Start"}</button>
               <button onClick={resetTimer} className={timerButtonClass} style={{ ...glassPill, color: "rgba(255,255,255,0.92)" }}>Reset</button>
-              <button onClick={skipCycle} className={timerButtonClass} style={{ ...glassPill, color: "rgba(255,255,255,0.92)" }}>Proximo</button>
+              <button onClick={skipCycle} className={timerButtonClass} style={{ ...glassPill, color: "rgba(255,255,255,0.92)" }}>Next</button>
             </div>
           ) : (
             <div className="grid grid-cols-2 gap-1.5 w-full max-w-[420px]">
@@ -1079,7 +1136,7 @@ export default function Home() {
                   color: chronoBreakRemaining > 0 ? "rgba(255,255,255,0.35)" : "rgba(255,255,255,0.92)",
                 }}
               >
-                {chronoBreakRemaining > 0 ? `Intervalo ${formatTimer(chronoBreakRemaining)}` : chronoRunning ? "Pausar" : "Iniciar"}
+                {chronoBreakRemaining > 0 ? `Break ${formatTimer(chronoBreakRemaining)}` : chronoRunning ? "Pause" : "Start"}
               </button>
               <button
                 onClick={() => {
@@ -1093,23 +1150,24 @@ export default function Home() {
                 className={timerButtonClass}
                 style={{ ...glassPill, color: "rgba(255,255,255,0.92)" }}
               >
-                Encerrar
+                Finish
               </button>
             </div>
           )}
 
           <div className="text-center">
-            <p className="label" style={{ color: "rgba(255,255,255,0.3)" }}>Ciclos</p>
+            <p className="label" style={{ color: "rgba(255,255,255,0.3)" }}>Cycles</p>
             <p className="font-mono text-2xl font-bold" style={{ color: "rgba(255,255,255,0.76)" }}>{focusCyclesCompleted}</p>
           </div>
         </section>
 
-        <section className="mt-2 w-full pb-24">
+        <section className="w-full pb-24" style={{ marginTop: appTab === "review" ? 0 : "0.5rem" }}>
+          {appTab !== "review" && (
           <div className="w-full max-w-6xl mx-auto flex flex-col items-center">
             <div className="w-full flex justify-between items-end mb-4">
               <div>
-                <p className="font-semibold" style={{ fontSize: "0.78rem", color: "rgba(255,255,255,0.5)", letterSpacing: "0.08em", textTransform: "uppercase" }}>Horas de estudo</p>
-                <p className="label mt-0.5" style={{ color: "rgba(255,255,255,0.2)" }}>janeiro a dezembro</p>
+                <p className="font-semibold" style={{ fontSize: "0.78rem", color: "rgba(255,255,255,0.5)", letterSpacing: "0.08em", textTransform: "uppercase" }}>Study hours</p>
+                <p className="label mt-0.5" style={{ color: "rgba(255,255,255,0.2)" }}>january to december</p>
               </div>
               <div className="text-right">
                 <p className="font-mono font-bold" style={{ fontSize: "1.6rem", color: "rgba(255,255,255,0.65)" }}>{formatMinutesAsHours(totalMinutes)}</p>
@@ -1121,7 +1179,7 @@ export default function Home() {
 
             <div className="mt-5 flex items-center justify-center">
               <button onClick={() => setShow3D((value) => !value)} className="label rounded-full px-5 py-2" style={{ ...glassGhost, color: "rgba(255,255,255,0.48)" }}>
-                {show3D ? "Ocultar detalhes" : "Ver detalhes"}
+                {show3D ? "Hide details" : "Show details"}
               </button>
             </div>
 
@@ -1131,23 +1189,24 @@ export default function Home() {
               </div>
             )}
           </div>
+          )}
 
           {appTab === "tasks" && (
             <div className="mt-8 space-y-3" style={{ borderTop: "1px solid rgba(255,255,255,0.06)", paddingTop: "2rem" }}>
-              <h3 className="text-sm font-semibold" style={{ color: "rgba(255,255,255,0.65)" }}>Tarefas</h3>
+              <h3 className="text-sm font-semibold" style={{ color: "rgba(255,255,255,0.65)" }}>Tasks</h3>
               <div className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_100px_90px]">
-                <input value={taskInput} onChange={(e) => setTaskInput(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") { addTask(taskInput, priorityInput); setTaskInput(""); } }} placeholder="Nova tarefa..." className="rounded-2xl px-4 py-2.5 text-sm text-white outline-none placeholder:text-white/20" style={glassGhost} />
+                <input value={taskInput} onChange={(e) => setTaskInput(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") { addTask(taskInput, priorityInput); setTaskInput(""); } }} placeholder="New task..." className="rounded-2xl px-4 py-2.5 text-sm text-white outline-none placeholder:text-white/20" style={glassGhost} />
                 <select
                   value={priorityInput}
                   onChange={(e) => setPriorityInput(e.target.value as "high" | "medium" | "low")}
                   className="rounded-2xl px-3 py-2.5 text-sm outline-none cursor-pointer"
                   style={{ ...glassGhost, background: "rgba(14,16,26,0.92)", color: "rgba(255,255,255,0.9)", border: "1px solid rgba(255,255,255,0.14)" }}
                 >
-                  <option value="high" style={{ background: "#0e101a", color: "#f4f6ff" }}>Alta</option>
-                  <option value="medium" style={{ background: "#0e101a", color: "#f4f6ff" }}>Media</option>
-                  <option value="low" style={{ background: "#0e101a", color: "#f4f6ff" }}>Baixa</option>
+                  <option value="high" style={{ background: "#0e101a", color: "#f4f6ff" }}>High</option>
+                  <option value="medium" style={{ background: "#0e101a", color: "#f4f6ff" }}>Medium</option>
+                  <option value="low" style={{ background: "#0e101a", color: "#f4f6ff" }}>Low</option>
                 </select>
-                <button onClick={() => { addTask(taskInput, priorityInput); setTaskInput(""); }} className="label rounded-2xl px-3 py-2.5 text-white" style={glassPill}>Inserir</button>
+                <button onClick={() => { addTask(taskInput, priorityInput); setTaskInput(""); }} className="label rounded-2xl px-3 py-2.5 text-white" style={glassPill}>Add</button>
               </div>
 
               <div className="scroll-slim max-h-64 space-y-1.5 overflow-y-auto pr-1">
@@ -1170,7 +1229,7 @@ export default function Home() {
                           background: task.completed ? "rgba(255,255,255,0.88)" : "transparent",
                           border: task.completed ? "none" : "1.5px solid rgba(255,255,255,0.3)",
                         }}
-                        aria-label={task.completed ? "Desmarcar" : "Marcar como concluida"}
+                        aria-label={task.completed ? "Uncheck" : "Mark as done"}
                       >
                         {task.completed && (
                           <svg width="11" height="8" viewBox="0 0 11 8" fill="none">
@@ -1195,8 +1254,8 @@ export default function Home() {
                         onClick={() => removeTask(task.id)}
                         className="flex h-7 w-7 items-center justify-center rounded-full transition-opacity duration-150 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 sm:focus:opacity-100"
                         style={{ ...glassGhost, color: "rgba(255,255,255,0.72)" }}
-                        aria-label="Excluir tarefa"
-                        title="Excluir tarefa"
+                        aria-label="Delete task"
+                        title="Delete task"
                       >
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
                           <path d="M4 7H20" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
@@ -1215,7 +1274,7 @@ export default function Home() {
 
           {appTab === "sound" && (
             <div className="mt-8 space-y-3" style={{ borderTop: "1px solid rgba(255,255,255,0.06)", paddingTop: "2rem" }}>
-              <h3 className="text-sm font-semibold" style={{ color: "rgba(255,255,255,0.65)" }}>Modulo de Som</h3>
+              <h3 className="text-sm font-semibold" style={{ color: "rgba(255,255,255,0.65)" }}>Sound Module</h3>
 
               <div className="grid gap-2 sm:grid-cols-3">
                 {ambientTracks.map((track) => (
@@ -1225,14 +1284,24 @@ export default function Home() {
                 ))}
               </div>
 
-              <div className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_120px]">
-                <input value={soundInput} onChange={(e) => setSoundInput(e.target.value)} placeholder="Cole URL (YouTube, Spotify embed, radio, mp3...)" className="rounded-2xl px-4 py-2.5 text-sm text-white outline-none placeholder:text-white/25" style={glassGhost} />
-                <button onClick={() => setCustomSoundUrl(soundInput)} className="label rounded-2xl px-3 py-2.5 text-white" style={glassPill}>Aplicar URL</button>
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_120px_120px]">
+                <input value={soundInput} onChange={(e) => setSoundInput(e.target.value)} placeholder="Paste URL (YouTube, Spotify, radio, mp3...)" className="rounded-2xl px-4 py-2.5 text-sm text-white outline-none placeholder:text-white/25" style={glassGhost} />
+                <button onClick={() => setCustomSoundUrl(soundInput)} className="label rounded-2xl px-3 py-2.5 text-white" style={glassPill}>Apply URL</button>
+                <button
+                  onClick={() => {
+                    setCustomSoundUrl("");
+                    setSoundInput("");
+                  }}
+                  className="label rounded-2xl px-3 py-2.5"
+                  style={{ ...glassGhost, color: "rgba(255,255,255,0.62)" }}
+                >
+                  Remove URL
+                </button>
               </div>
 
               <div className="flex items-center gap-2">
                 <button onClick={() => setSoundAutoplay((value) => !value)} className="label rounded-full px-4 py-2" style={{ ...glassGhost, color: "rgba(255,255,255,0.52)" }}>{soundAutoplay ? "Autoplay ON" : "Autoplay OFF"}</button>
-                <button onClick={() => setSoundReloadSeed((value) => value + 1)} className="label rounded-full px-4 py-2" style={{ ...glassGhost, color: "rgba(255,255,255,0.52)" }}>Recarregar</button>
+                <button onClick={() => setSoundReloadSeed((value) => value + 1)} className="label rounded-full px-4 py-2" style={{ ...glassGhost, color: "rgba(255,255,255,0.52)" }}>Reload</button>
               </div>
 
             </div>
@@ -1240,7 +1309,7 @@ export default function Home() {
 
           {appTab === "journal" && (
             <div className="mt-8 space-y-4" style={{ borderTop: "1px solid rgba(255,255,255,0.06)", paddingTop: "2rem" }}>
-              <h3 className="text-sm font-semibold" style={{ color: "rgba(255,255,255,0.65)" }}>Calendario e notas</h3>
+              <h3 className="text-sm font-semibold" style={{ color: "rgba(255,255,255,0.65)" }}>Calendar & Notes</h3>
 
               <div className="grid gap-4 lg:grid-cols-[320px_1fr]">
                 <div className="rounded-2xl p-3 space-y-3" style={glassGhost}>
@@ -1261,7 +1330,7 @@ export default function Home() {
                   </div>
 
                   <div className="grid grid-cols-7 gap-1 text-center">
-                    {["D", "S", "T", "Q", "Q", "S", "S"].map((label, idx) => (
+                    {["S", "M", "T", "W", "T", "F", "S"].map((label, idx) => (
                       <p key={idx} className="label" style={{ color: "rgba(255,255,255,0.22)" }}>{label}</p>
                     ))}
 
@@ -1292,10 +1361,209 @@ export default function Home() {
 
                 <div className="rounded-2xl p-3 space-y-2" style={glassGhost}>
                   <p className="font-mono text-sm text-white/75">{fromDateKey(selectedDateKey).toLocaleDateString("pt-BR", { weekday: "long", day: "2-digit", month: "2-digit", year: "numeric" })}</p>
-                  <p className="label" style={{ color: "rgba(255,255,255,0.28)" }}>Estudo no dia: {formatMinutesAsHours(selectedDayMinutes)}</p>
-                  <textarea rows={12} value={selectedNote} onChange={(e) => setDailyNote(selectedDateKey, e.target.value)} placeholder="Escreva observacoes do dia" className="w-full rounded-xl px-3 py-2 text-sm text-white outline-none resize-none placeholder:text-white/25" style={glassGhost} />
+                  <p className="label" style={{ color: "rgba(255,255,255,0.28)" }}>Study time: {formatMinutesAsHours(selectedDayMinutes)}</p>
+                  <textarea rows={12} value={selectedNote} onChange={(e) => setDailyNote(selectedDateKey, e.target.value)} placeholder="Write notes for the day" className="w-full rounded-xl px-3 py-2 text-sm text-white outline-none resize-none placeholder:text-white/25" style={glassGhost} />
                 </div>
               </div>
+            </div>
+          )}
+
+          {appTab === "review" && (
+            <div className="w-full pt-1 sm:pt-0">
+              {/* Header */}
+              <div className="flex items-center justify-between mb-6 px-1">
+                <div>
+                  <h2 className="text-base font-semibold tracking-wide" style={{ color: "rgba(255,255,255,0.8)" }}>Study Review</h2>
+                  <p className="text-xs mt-0.5" style={{ color: "rgba(255,255,255,0.35)" }}>Track your revision schedule</p>
+                </div>
+                <button
+                  onClick={() => addReviewBlock()}
+                  className="label rounded-full px-4 py-2 text-white text-xs"
+                  style={glassPill}
+                >
+                  + Add Block
+                </button>
+              </div>
+
+              {/* Blocks */}
+              {reviewBlocks.length > 0 && (
+                <div className="grid grid-cols-1 gap-6">
+                  {reviewBlocks
+                    .slice()
+                    .sort((a, b) => a.order - b.order)
+                    .map((block) => {
+                      const topicSubject = block.subjects[0];
+                      const fronts = topicSubject?.fronts ?? [];
+                      const blockInput = reviewBlockInputs[block.id] ?? { topic: "" };
+                      const setBlockInput = (patch: Partial<typeof blockInput>) =>
+                        setReviewBlockInputs((prev) => ({ ...prev, [block.id]: { ...blockInput, ...patch } }));
+
+                      return (
+                        <div key={block.id} className="w-full">
+                          <div className="rounded-2xl overflow-x-auto" style={{ ...glassGhost, border: "1px solid rgba(255,255,255,0.1)" }}>
+                            <table className="w-full border-collapse" style={{ minWidth: 540 }}>
+                              <thead>
+                                <tr style={{ background: "rgba(255,255,255,0.04)", borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
+                                  <th colSpan={4} className="px-3 py-2 text-left">
+                                    {editingBlockId === block.id ? (
+                                      <input
+                                        autoFocus
+                                        defaultValue={block.name}
+                                        onBlur={(e) => {
+                                          updateReviewBlockName(block.id, e.target.value || block.name);
+                                          setEditingBlockId(null);
+                                        }}
+                                        onKeyDown={(e) => {
+                                          if (e.key === "Enter") {
+                                            updateReviewBlockName(block.id, e.currentTarget.value || block.name);
+                                            setEditingBlockId(null);
+                                          }
+                                          if (e.key === "Escape") setEditingBlockId(null);
+                                        }}
+                                        className="bg-transparent text-sm font-semibold outline-none border-b w-40"
+                                        style={{ color: "rgba(255,255,255,0.85)", borderColor: "rgba(255,255,255,0.3)" }}
+                                      />
+                                    ) : (
+                                      <button onClick={() => setEditingBlockId(block.id)} className="text-sm font-semibold" style={{ color: "rgba(255,255,255,0.72)" }}>
+                                        {block.name}
+                                      </button>
+                                    )}
+                                  </th>
+                                  <th className="px-2 py-2 text-right">
+                                    <button
+                                      onClick={() => removeReviewBlock(block.id)}
+                                      className="h-6 w-6 flex items-center justify-center rounded-full ml-auto"
+                                      style={{ ...glassGhost, color: "rgba(255,100,100,0.7)" }}
+                                      title="Delete block"
+                                    >
+                                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none"><path d="M19 5L5 19M5 5l14 14" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" /></svg>
+                                    </button>
+                                  </th>
+                                </tr>
+                                <tr style={{ borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
+                                  <th className="text-left px-3 py-3 text-xs font-semibold tracking-widest uppercase" style={{ color: "rgba(255,255,255,0.35)", borderRight: "1px solid rgba(255,255,255,0.05)" }}>Topic</th>
+                                  <th className="text-center px-3 py-3 text-xs font-semibold tracking-widest uppercase" style={{ color: "rgba(255,255,255,0.35)", width: 180, borderRight: "1px solid rgba(255,255,255,0.05)" }}>Weekly</th>
+                                  <th className="text-center px-3 py-3 text-xs font-semibold tracking-widest uppercase" style={{ color: "rgba(255,255,255,0.35)", width: 120, borderRight: "1px solid rgba(255,255,255,0.05)" }}>Biweekly</th>
+                                  <th className="text-center px-3 py-3 text-xs font-semibold tracking-widest uppercase" style={{ color: "rgba(255,255,255,0.35)", width: 70 }}>Monthly</th>
+                                  <th style={{ width: 32 }} />
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {fronts.map((front) => (
+                                  <tr
+                                    key={front.id}
+                                    draggable
+                                    onDragStart={() => setDragTopicId(front.id)}
+                                    onDragOver={(e) => e.preventDefault()}
+                                    onDrop={() => {
+                                      if (!dragTopicId) return;
+                                      const fromIndex = fronts.findIndex((item) => item.id === dragTopicId);
+                                      const toIndex = fronts.findIndex((item) => item.id === front.id);
+                                      if (fromIndex >= 0 && toIndex >= 0) {
+                                        moveTopicInBlock(block.id, fromIndex, toIndex);
+                                      }
+                                      setDragTopicId(null);
+                                    }}
+                                    onDragEnd={() => setDragTopicId(null)}
+                                    style={{ borderBottom: "1px solid rgba(255,255,255,0.04)" }}
+                                  >
+                                    <td className="px-3 py-2 text-sm" style={{ color: "rgba(255,255,255,0.68)", borderRight: "1px solid rgba(255,255,255,0.05)" }}>
+                                      <div className="flex items-center gap-2">
+                                        <span className="cursor-grab text-white/30" title="Drag to reorder">⋮⋮</span>
+                                        <span>{front.title}</span>
+                                      </div>
+                                    </td>
+                                    {(["weekly", "biweekly", "monthly"] as const).map((period) => (
+                                      <td key={period} className="text-center px-2 py-2" style={{ borderRight: period !== "monthly" ? "1px solid rgba(255,255,255,0.05)" : undefined }}>
+                                        <div className="flex flex-wrap items-center justify-center gap-1">
+                                          {front.checks[period].map((checked, checkIndex) => (
+                                            <button
+                                              key={`${front.id}-${period}-${checkIndex}`}
+                                              onClick={() => toggleTopicCheck(block.id, front.id, period, checkIndex)}
+                                              className="rounded-[3px] flex items-center justify-center transition-all duration-150 shrink-0"
+                                              style={{
+                                                width: 13,
+                                                minWidth: 13,
+                                                maxWidth: 13,
+                                                height: 13,
+                                                minHeight: 13,
+                                                maxHeight: 13,
+                                                boxSizing: "border-box",
+                                                background: checked ? "#22C55E" : "rgba(255,255,255,0.04)",
+                                                border: checked ? "1px solid #22C55E" : "1px solid rgba(255,255,255,0.18)",
+                                              }}
+                                              aria-label={`Toggle ${period} ${checkIndex + 1}`}
+                                            >
+                                              {checked && (
+                                                <svg width="8" height="7" viewBox="0 0 12 9" fill="none">
+                                                  <path d="M1 4L4.5 7.5L11 1" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                                                </svg>
+                                              )}
+                                            </button>
+                                          ))}
+                                        </div>
+                                      </td>
+                                    ))}
+                                    <td className="px-2 py-2">
+                                      <button
+                                        onClick={() => removeTopicFromBlock(block.id, front.id)}
+                                        className="w-5 h-5 flex items-center justify-center rounded opacity-30 hover:opacity-70 transition-opacity"
+                                        style={{ color: "rgba(255,255,255,0.8)" }}
+                                        title="Remove topic"
+                                      >
+                                        <svg width="9" height="9" viewBox="0 0 24 24" fill="none"><path d="M19 5L5 19M5 5l14 14" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" /></svg>
+                                      </button>
+                                    </td>
+                                  </tr>
+                                ))}
+
+                                <tr style={{ borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
+                                  <td colSpan={5} className="px-2 py-2">
+                                    <div className="flex gap-2 items-center">
+                                      <input
+                                        type="text"
+                                        value={blockInput.topic}
+                                        onChange={(e) => setBlockInput({ topic: e.target.value })}
+                                        onKeyDown={(e) => {
+                                          if (e.key === "Enter" && blockInput.topic.trim()) {
+                                            addTopicToBlock(block.id, blockInput.topic.trim());
+                                            setBlockInput({ topic: "" });
+                                          }
+                                        }}
+                                        placeholder="Add topic..."
+                                        className="flex-1 rounded-lg px-3 py-1.5 text-xs text-white outline-none placeholder:text-white/20"
+                                        style={glassGhost}
+                                      />
+                                      <button
+                                        onClick={() => {
+                                          if (blockInput.topic.trim()) {
+                                            addTopicToBlock(block.id, blockInput.topic.trim());
+                                            setBlockInput({ topic: "" });
+                                          }
+                                        }}
+                                        className="rounded-lg px-3 py-1.5 text-xs text-white"
+                                        style={glassPill}
+                                      >
+                                        + Topic
+                                      </button>
+                                    </div>
+                                  </td>
+                                </tr>
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+                      );
+                    })}
+                </div>
+              )}
+
+              {reviewBlocks.length === 0 && (
+                <div className="flex flex-col items-center justify-center py-20 gap-4">
+                  <p className="text-sm" style={{ color: "rgba(255,255,255,0.3)" }}>No blocks yet. Add your first study block.</p>
+                  <button onClick={() => addReviewBlock()} className="label rounded-full px-5 py-2 text-white" style={glassPill}>+ Add Block</button>
+                </div>
+              )}
             </div>
           )}
           {/* Always-mounted player — key only changes on URL/reload, never on tab switch */}
@@ -1329,7 +1597,7 @@ export default function Home() {
                     setSettingsOpen(true);
                     return;
                   }
-                  setTab(item.id as "focus" | "tasks" | "sound" | "journal" | "settings");
+                  setTab(item.id as typeof appTab);
                 }}
                 className="label px-2.5 sm:px-4 py-1.5 sm:py-2 rounded-full whitespace-nowrap"
                 style={{ ...(active ? { ...glassPill, ...glassActive } : {}), color: active ? "rgba(255,255,255,0.9)" : "rgba(255,255,255,0.35)" }}
@@ -1344,11 +1612,12 @@ export default function Home() {
 
       {settingsOpen && (
         <SettingsModal
-          key={`${timerDurations.focus}-${timerDurations.shortBreak}-${timerDurations.longBreak}-${customMotivationalPhrase}`}
+          key={`${timerDurations.focus}-${timerDurations.shortBreak}-${timerDurations.longBreak}-${customMotivationalPhrase}-${reviewCheckConfig.weekly}-${reviewCheckConfig.biweekly}-${reviewCheckConfig.monthly}`}
           onClose={() => setSettingsOpen(false)}
           focusMinutes={Math.round(timerDurations.focus / 60)}
           shortBreakMinutes={Math.round(timerDurations.shortBreak / 60)}
           longBreakMinutes={Math.round(timerDurations.longBreak / 60)}
+          reviewChecklist={reviewCheckConfig}
           timerSystemMode={timerSystemMode}
           motivationalPhrase={customMotivationalPhrase}
           onResetHeatmaps={() => {
@@ -1361,6 +1630,7 @@ export default function Home() {
               setChronoRunning(false);
               setChronoBreakRemaining(0);
             }
+            setReviewCheckConfig(payload.reviewChecklist);
             setTimerSystemMode(payload.mode);
             setSettingsOpen(false);
           }}

@@ -1,6 +1,7 @@
 import type {
   AmbientTrack,
   JournalEntry,
+  ReviewBlock,
   StudyCircle,
   StudyLog,
   StudyTopic,
@@ -113,6 +114,29 @@ export const initialCircles: StudyCircle[] = [
 
 export const ambientTracks: AmbientTrack[] = [
   { title: "Dark Academia", youtubeId: "rCmQJfAzwEQ" },
-  { title: "Night Studies", youtubeId: "ZrKPW5d3idY" },
+  { title: "Rainy Day In The Forest", youtubeId: "sa61rE36264" },
   { title: "Dark Academia Piano", youtubeId: "SllpB3W5f6s" },
+];
+
+export const initialReviewBlocks: ReviewBlock[] = [
+  {
+    id: "block-1",
+    name: "Block 01",
+    subjects: [
+      {
+        id: "subj-1-1",
+        name: "Topics",
+        color: "#3B82F6",
+        fronts: [
+          { id: "front-1-1-1", title: "Number Sets", checks: { weekly: Array.from({ length: 6 }, () => false), biweekly: Array.from({ length: 3 }, () => false), monthly: [false] } },
+          { id: "front-1-1-2", title: "Functions & Relations", checks: { weekly: Array.from({ length: 6 }, () => false), biweekly: Array.from({ length: 3 }, () => false), monthly: [false] } },
+          { id: "front-1-1-3", title: "Uniform Motion", checks: { weekly: Array.from({ length: 6 }, () => false), biweekly: Array.from({ length: 3 }, () => false), monthly: [false] } },
+          { id: "front-1-1-4", title: "Word Formation", checks: { weekly: Array.from({ length: 6 }, () => false), biweekly: Array.from({ length: 3 }, () => false), monthly: [false] } },
+        ],
+        order: 0,
+      },
+    ],
+    createdAt: now.toISOString(),
+    order: 0,
+  },
 ];

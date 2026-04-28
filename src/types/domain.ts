@@ -56,6 +56,38 @@ export interface StudyCircle {
   activity: string;
 }
 
+export interface ReviewFront {
+  id: string;
+  title: string;
+  checks: {
+    weekly: boolean[];
+    biweekly: boolean[];
+    monthly: boolean[];
+  };
+}
+
+export interface ReviewCheckConfig {
+  weekly: number;
+  biweekly: number;
+  monthly: number;
+}
+
+export interface ReviewSubject {
+  id: string;
+  name: string;
+  color: string;
+  fronts: ReviewFront[];
+  order: number;
+}
+
+export interface ReviewBlock {
+  id: string;
+  name: string;
+  subjects: ReviewSubject[];
+  createdAt: string;
+  order: number;
+}
+
 export interface AmbientTrack {
   title: string;
   youtubeId: string;
