@@ -659,15 +659,21 @@ const AmbientPlayer = memo(function AmbientPlayer({
   const [isDragging, setIsDragging] = useState(false);
   const [dockedPosition, setDockedPosition] = useState<{ x: number; y: number }>({ x: 12, y: 72 });
 
+  const getDocumentZoom = useCallback(() => {
+    const rawZoom = Number.parseFloat(window.getComputedStyle(document.body).zoom || "1");
+    return Number.isFinite(rawZoom) && rawZoom > 0 ? rawZoom : 1;
+  }, []);
+
   useEffect(() => {
     if (!docked) return;
 
     const width = playerRef.current?.offsetWidth ?? 240;
+    const zoom = getDocumentZoom();
     setDockedPosition((prev) => {
       if (prev.x !== 12 || prev.y !== 72) return prev;
-      return { x: Math.max(12, window.innerWidth - width - 12), y: 72 };
+      return { x: Math.max(12, window.innerWidth / zoom - width - 12), y: 72 };
     });
-  }, [docked]);
+  }, [docked, getDocumentZoom]);
 
   useEffect(() => {
     if (!isDragging) return;
@@ -703,15 +709,16 @@ const AmbientPlayer = memo(function AmbientPlayer({
       if (!dragStateRef.current.active || !playerRef.current) return;
       if (dragStateRef.current.pointerId !== null && moveEvent.pointerId !== dragStateRef.current.pointerId) return;
 
-      const viewportW = document.documentElement.clientWidth;
-      const viewportH = document.documentElement.clientHeight;
+      const zoom = getDocumentZoom();
+      const viewportW = document.documentElement.clientWidth / zoom;
+      const viewportH = document.documentElement.clientHeight / zoom;
       const width = playerRef.current.offsetWidth;
       const height = playerRef.current.offsetHeight;
       const maxX = Math.max(0, viewportW - width);
       const maxY = Math.max(0, viewportH - height);
 
-      const nextX = Math.max(0, Math.min(maxX, moveEvent.clientX - dragStateRef.current.offsetX));
-      const nextY = Math.max(0, Math.min(maxY, moveEvent.clientY - dragStateRef.current.offsetY));
+      const nextX = Math.max(0, Math.min(maxX, (moveEvent.clientX - dragStateRef.current.offsetX) / zoom));
+      const nextY = Math.max(0, Math.min(maxY, (moveEvent.clientY - dragStateRef.current.offsetY) / zoom));
       pendingPositionRef.current = { x: nextX, y: nextY };
 
       if (dragRafRef.current !== null) return;
@@ -738,7 +745,7 @@ const AmbientPlayer = memo(function AmbientPlayer({
       window.removeEventListener("pointerup", onPointerUp);
       window.removeEventListener("pointercancel", onPointerUp);
     };
-  }, [endDrag]);
+  }, [endDrag, getDocumentZoom]);
 
   const onPointerDownDrag = useCallback((event: React.PointerEvent<HTMLButtonElement>) => {
     if (!docked || !playerRef.current) return;
@@ -1904,6 +1911,7 @@ export default function Home() {
           }}
         />
       )}
+
     </main>
   );
 }
