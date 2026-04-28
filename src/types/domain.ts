@@ -59,12 +59,15 @@ export interface StudyCircle {
 export interface ReviewFront {
   id: string;
   title: string;
+  color: TopicColor;
   checks: {
     weekly: boolean[];
     biweekly: boolean[];
     monthly: boolean[];
   };
 }
+
+export type TopicColor = "gray" | "blue" | "green" | "red" | "orange" | "yellow";
 
 export interface ReviewCheckConfig {
   weekly: number;

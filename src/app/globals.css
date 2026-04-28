@@ -158,6 +158,16 @@ a {
   animation: rise 0.35s ease-out both;
 }
 
+.review-zoom {
+  font-size: 1.14rem;
+}
+
+@media (max-width: 767px) {
+  .review-zoom {
+    font-size: 1.1rem;
+  }
+}
+
 /* Scale up header elements to compensate for 80% zoom on desktop */
 @media (min-width: 768px) {
   .header-label,

@@ -3,7 +3,7 @@
 import { Fragment, memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { fromLocalDateKey, toLocalDateKey, toLocalDateKeyFromTimestamp } from "@/lib/date";
 import { useStudydimStore } from "@/store/studydim-store";
-import type { TimerMode } from "@/types/domain";
+import type { TimerMode, TopicColor } from "@/types/domain";
 
 function formatTimer(seconds: number): string {
   const mm = Math.floor(seconds / 60).toString().padStart(2, "0");
@@ -103,6 +103,25 @@ function normalizeEmbedUrl(rawUrl: string): { type: "audio" | "iframe"; src: str
   }
 }
 
+function splitMotivationalQuote(raw: string): { text: string; author?: string } {
+  const value = raw.trim();
+  if (!value) return { text: "" };
+
+  const separators = [" — ", " - "];
+  for (const separator of separators) {
+    const index = value.lastIndexOf(separator);
+    if (index > 0 && index < value.length - separator.length) {
+      const text = value.slice(0, index).trim();
+      const author = value.slice(index + separator.length).trim();
+      if (text && author) {
+        return { text, author };
+      }
+    }
+  }
+
+  return { text: value };
+}
+
 const MOTIVATIONAL_QUOTES = [
   "Voce so fracassa quando desiste de tentar.",
   "As vezes voce ganha, as vezes voce aprende.",
@@ -139,6 +158,19 @@ const TIMER_MODES: { id: TimerMode; label: string }[] = [
   { id: "shortBreak", label: "Short Break" },
   { id: "longBreak", label: "Long Break" },
 ];
+
+const TOPIC_COLOR_OPTIONS: Array<{ id: TopicColor; label: string; value: string }> = [
+  { id: "blue", label: "Blue", value: "#3B82F6" },
+  { id: "green", label: "Green", value: "#22C55E" },
+  { id: "red", label: "Red", value: "#EF4444" },
+  { id: "orange", label: "Orange", value: "#F97316" },
+  { id: "yellow", label: "Yellow", value: "#EAB308" },
+];
+
+const DEFAULT_TOPIC_COLOR: TopicColor = "gray";
+
+const topicColorToHex = (color: TopicColor): string =>
+  (color === "gray" ? "#6B7280" : TOPIC_COLOR_OPTIONS.find((item) => item.id === color)?.value) ?? "#6B7280";
 
 const glassPill: React.CSSProperties = {
   background: "rgba(255,255,255,0.06)",
@@ -432,6 +464,7 @@ function SettingsModal({
   shortBreakMinutes,
   longBreakMinutes,
   reviewChecklist,
+  beepVolume,
   timerSystemMode,
   motivationalPhrase,
   onSave,
@@ -442,9 +475,10 @@ function SettingsModal({
   shortBreakMinutes: number;
   longBreakMinutes: number;
   reviewChecklist: { weekly: number; biweekly: number; monthly: number };
+  beepVolume: number;
   timerSystemMode: "pomodoro" | "chronometer";
   motivationalPhrase: string;
-  onSave: (payload: { focus: number; shortBreak: number; longBreak: number; phrase: string; mode: "pomodoro" | "chronometer"; reviewChecklist: { weekly: number; biweekly: number; monthly: number } }) => void;
+  onSave: (payload: { focus: number; shortBreak: number; longBreak: number; phrase: string; mode: "pomodoro" | "chronometer"; reviewChecklist: { weekly: number; biweekly: number; monthly: number }; beepVolume: number }) => void;
   onResetHeatmaps: () => void;
 }) {
   const [focus, setFocus] = useState(focusMinutes);
@@ -455,6 +489,23 @@ function SettingsModal({
   const [weeklyChecks, setWeeklyChecks] = useState(reviewChecklist.weekly);
   const [biweeklyChecks, setBiweeklyChecks] = useState(reviewChecklist.biweekly);
   const [monthlyChecks, setMonthlyChecks] = useState(reviewChecklist.monthly);
+  const [beepVolumePercent, setBeepVolumePercent] = useState(Math.round(beepVolume * 100));
+
+  const playTestBeep = useCallback(() => {
+    const ctx = new window.AudioContext();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = "sine";
+    osc.frequency.value = 620;
+    gain.gain.value = Math.max(0, Math.min(100, beepVolumePercent)) / 100 * 0.08;
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start();
+    osc.stop(ctx.currentTime + 0.22);
+    window.setTimeout(() => {
+      void ctx.close();
+    }, 300);
+  }, [beepVolumePercent]);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
@@ -506,6 +557,27 @@ function SettingsModal({
           </div>
 
           <label className="block text-xs text-white/70">
+            Beep volume ({beepVolumePercent}%)
+            <input
+              type="range"
+              min={0}
+              max={100}
+              step={1}
+              value={beepVolumePercent}
+              onChange={(e) => setBeepVolumePercent(Number(e.target.value))}
+              className="mt-2 w-full accent-white"
+            />
+            <button
+              type="button"
+              onClick={playTestBeep}
+              className="mt-2 rounded-lg px-3 py-1.5 text-xs text-white"
+              style={glassGhost}
+            >
+              Test beep
+            </button>
+          </label>
+
+          <label className="block text-xs text-white/70">
             Custom motivational phrase
             <input value={phrase} onChange={(e) => setPhrase(e.target.value)} placeholder="Type to replace the rotating quotes" className="mt-1 w-full rounded-xl px-3 py-2 text-white outline-none placeholder:text-white/30" style={glassGhost} />
           </label>
@@ -541,6 +613,7 @@ function SettingsModal({
                     biweekly: Math.max(1, Math.min(12, Math.round(biweeklyChecks))),
                     monthly: Math.max(1, Math.min(12, Math.round(monthlyChecks))),
                   },
+                  beepVolume: Math.max(0, Math.min(100, Math.round(beepVolumePercent))) / 100,
                 })
               }
               className="h-10 w-28 rounded-full text-xs text-white"
@@ -782,6 +855,7 @@ export default function Home() {
     timerRunning,
     focusCyclesCompleted,
     modeSwitchedAt,
+    beepVolume,
     customMotivationalPhrase,
     dailyNotes,
     tasks,
@@ -793,6 +867,7 @@ export default function Home() {
     setTimerSystemMode,
     setTimerMode,
     updateTimerDurations,
+    setBeepVolume,
     setCustomMotivationalPhrase,
     setDailyNote,
     toggleTimer,
@@ -814,6 +889,7 @@ export default function Home() {
     updateReviewBlockName,
     setReviewCheckConfig,
     addTopicToBlock,
+    updateTopicInBlock,
     removeTopicFromBlock,
     toggleTopicCheck,
     moveTopicInBlock,
@@ -845,6 +921,15 @@ export default function Home() {
   const [reviewBlockInputs, setReviewBlockInputs] = useState<Record<string, { topic: string }>>({});
   const [editingBlockId, setEditingBlockId] = useState<string | null>(null);
   const [dragTopicId, setDragTopicId] = useState<string | null>(null);
+  const [collapsedBlocks, setCollapsedBlocks] = useState<Record<string, boolean>>({});
+  const [topicEditor, setTopicEditor] = useState<{
+    blockId: string;
+    frontId: string;
+    title: string;
+    color: TopicColor;
+    x: number;
+    y: number;
+  } | null>(null);
 
   // Reactive today — updates exactly at midnight without page reload
   const [todayKey, setTodayKey] = useState(() => toLocalDateKey(new Date()));
@@ -859,6 +944,46 @@ export default function Home() {
   useEffect(() => {
     rolloverTasksForDate(todayKey);
   }, [todayKey, rolloverTasksForDate]);
+
+  useEffect(() => {
+    const onWindowClick = () => setTopicEditor(null);
+    window.addEventListener("click", onWindowClick);
+    return () => window.removeEventListener("click", onWindowClick);
+  }, []);
+
+  const applyTopicEditorChanges = useCallback((blockId: string, frontId: string, patch: { title?: string; color?: TopicColor }) => {
+    if (typeof updateTopicInBlock === "function") {
+      updateTopicInBlock(blockId, frontId, patch);
+      return;
+    }
+
+    useStudydimStore.setState((state) => ({
+      reviewBlocks: state.reviewBlocks.map((block) => {
+        if (block.id !== blockId) return block;
+        const subject = block.subjects[0];
+        if (!subject) return block;
+
+        const normalizedTitle = typeof patch.title === "string" ? patch.title.trim() : undefined;
+        return {
+          ...block,
+          subjects: [
+            {
+              ...subject,
+              fronts: subject.fronts.map((front) =>
+                front.id !== frontId
+                  ? front
+                  : {
+                      ...front,
+                      title: normalizedTitle || front.title,
+                      color: patch.color ?? front.color,
+                    },
+              ),
+            },
+          ],
+        };
+      }),
+    }));
+  }, [updateTopicInBlock]);
 
   const previousSwitchRef = useRef(modeSwitchedAt);
   const lastTickAtRef = useRef<number | null>(null);
@@ -999,6 +1124,7 @@ export default function Home() {
   );
 
   const displayedQuote = customMotivationalPhrase.trim() ? customMotivationalPhrase : MOTIVATIONAL_QUOTES[quoteIndex];
+  const displayedQuoteParts = useMemo(() => splitMotivationalQuote(displayedQuote), [displayedQuote]);
 
   const focusStudyLogs = useMemo(() => studyLogs.filter((entry) => entry.mode === "focus"), [studyLogs]);
 
@@ -1077,17 +1203,24 @@ export default function Home() {
       <div className="relative z-10 flex flex-col flex-1">
         {appTab !== "review" && (
           <header className="absolute inset-x-0 top-0 z-10">
-            <div className="absolute left-4 top-4 flex flex-col items-start gap-0.5 sm:left-5 sm:top-5">
+            <div className="absolute left-4 top-2.5 flex flex-col items-start gap-0.5 sm:left-5 sm:top-3">
               <p className="label header-label m-0 leading-none" style={{ color: "rgba(255,255,255,0.45)" }}>Studydim</p>
               <p className="label header-date m-0 leading-none" style={{ color: "rgba(255,255,255,0.22)" }}>{dateLabel}</p>
             </div>
-            <div className="absolute right-4 top-4 max-w-[45vw] text-right sm:right-5 sm:top-5 sm:max-w-[360px]" style={{ opacity: quoteVisible ? 1 : 0.2, transition: "opacity 350ms ease" }}>
-              <p className="label header-quote normal-case tracking-normal m-0 leading-none" style={{ color: "rgba(255,255,255,0.36)" }}>{displayedQuote}</p>
+            <div className="absolute right-4 top-2.5 max-w-[58vw] text-right sm:right-5 sm:top-3 sm:max-w-[420px]" style={{ opacity: quoteVisible ? 1 : 0.2, transition: "opacity 350ms ease" }}>
+              <p className="header-quote m-0 leading-tight" style={{ color: "rgba(255,255,255,0.42)", fontFamily: "var(--font-share-tech-mono), monospace", fontSize: "0.72rem", letterSpacing: "0.02em", textTransform: "none" }}>
+                {displayedQuoteParts.text}
+              </p>
+              {displayedQuoteParts.author && (
+                <p className="m-0 mt-0.5 leading-none" style={{ color: "rgba(255,255,255,0.32)", fontFamily: "var(--font-share-tech-mono), monospace", fontSize: "0.68rem", letterSpacing: "0.04em", textTransform: "none" }}>
+                  - {displayedQuoteParts.author}
+                </p>
+              )}
             </div>
           </header>
         )}
 
-        <section className="flex-1 flex flex-col items-center justify-center gap-6 md:gap-8 pt-24 sm:pt-14 pb-2" style={{ display: appTab === "review" ? "none" : undefined }}>
+        <section className="flex-1 flex flex-col items-center justify-center gap-6 md:gap-8 pt-20 sm:pt-10 pb-2" style={{ display: appTab === "review" ? "none" : undefined }}>
           {timerSystemMode === "pomodoro" ? (
             <div className="grid grid-cols-3 gap-1.5 w-full max-w-[420px]">
               {TIMER_MODES.map((modeItem) => {
@@ -1369,7 +1502,7 @@ export default function Home() {
           )}
 
           {appTab === "review" && (
-            <div className="w-full pt-1 sm:pt-0">
+            <div className="w-full pt-1 sm:pt-0 review-zoom">
               {/* Header */}
               <div className="flex items-center justify-between mb-6 px-1">
                 <div>
@@ -1394,6 +1527,7 @@ export default function Home() {
                     .map((block) => {
                       const topicSubject = block.subjects[0];
                       const fronts = topicSubject?.fronts ?? [];
+                      const isCollapsed = Boolean(collapsedBlocks[block.id]);
                       const blockInput = reviewBlockInputs[block.id] ?? { topic: "" };
                       const setBlockInput = (patch: Partial<typeof blockInput>) =>
                         setReviewBlockInputs((prev) => ({ ...prev, [block.id]: { ...blockInput, ...patch } }));
@@ -1401,54 +1535,81 @@ export default function Home() {
                       return (
                         <div key={block.id} className="w-full">
                           <div className="rounded-2xl overflow-x-auto" style={{ ...glassGhost, border: "1px solid rgba(255,255,255,0.1)" }}>
-                            <table className="w-full border-collapse" style={{ minWidth: 540 }}>
+                            <table className="w-full border-collapse" style={{ minWidth: 600 }}>
                               <thead>
                                 <tr style={{ background: "rgba(255,255,255,0.04)", borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
                                   <th colSpan={4} className="px-3 py-2 text-left">
-                                    {editingBlockId === block.id ? (
-                                      <input
-                                        autoFocus
-                                        defaultValue={block.name}
-                                        onBlur={(e) => {
-                                          updateReviewBlockName(block.id, e.target.value || block.name);
-                                          setEditingBlockId(null);
-                                        }}
-                                        onKeyDown={(e) => {
-                                          if (e.key === "Enter") {
-                                            updateReviewBlockName(block.id, e.currentTarget.value || block.name);
-                                            setEditingBlockId(null);
-                                          }
-                                          if (e.key === "Escape") setEditingBlockId(null);
-                                        }}
-                                        className="bg-transparent text-sm font-semibold outline-none border-b w-40"
-                                        style={{ color: "rgba(255,255,255,0.85)", borderColor: "rgba(255,255,255,0.3)" }}
-                                      />
-                                    ) : (
-                                      <button onClick={() => setEditingBlockId(block.id)} className="text-sm font-semibold" style={{ color: "rgba(255,255,255,0.72)" }}>
-                                        {block.name}
+                                    <div className="flex items-center justify-between gap-2">
+                                      <div>
+                                        {editingBlockId === block.id ? (
+                                          <input
+                                            autoFocus
+                                            defaultValue={block.name}
+                                            onBlur={(e) => {
+                                              updateReviewBlockName(block.id, e.target.value || block.name);
+                                              setEditingBlockId(null);
+                                            }}
+                                            onKeyDown={(e) => {
+                                              if (e.key === "Enter") {
+                                                updateReviewBlockName(block.id, e.currentTarget.value || block.name);
+                                                setEditingBlockId(null);
+                                              }
+                                              if (e.key === "Escape") setEditingBlockId(null);
+                                            }}
+                                            className="bg-transparent text-sm font-semibold outline-none border-b w-40"
+                                            style={{ color: "rgba(255,255,255,0.85)", borderColor: "rgba(255,255,255,0.3)" }}
+                                          />
+                                        ) : (
+                                          <button onClick={() => setEditingBlockId(block.id)} className="text-sm font-semibold" style={{ color: "rgba(255,255,255,0.72)" }}>
+                                            {block.name}
+                                          </button>
+                                        )}
+                                      </div>
+                                      <div className="flex items-center justify-end gap-1.5">
+                                      <button
+                                        onClick={() =>
+                                          setCollapsedBlocks((prev) => ({
+                                            ...prev,
+                                            [block.id]: !prev[block.id],
+                                          }))
+                                        }
+                                        className="h-6 w-6 flex items-center justify-center rounded-full"
+                                        style={{ ...glassGhost, color: "rgba(255,255,255,0.72)" }}
+                                        title={isCollapsed ? "Expand block" : "Collapse block"}
+                                        aria-label={isCollapsed ? "Expand block" : "Collapse block"}
+                                      >
+                                        <svg
+                                          width="11"
+                                          height="11"
+                                          viewBox="0 0 24 24"
+                                          fill="none"
+                                          style={{ transform: isCollapsed ? "rotate(-90deg)" : "rotate(0deg)", transition: "transform 150ms ease" }}
+                                        >
+                                          <path d="M6 9L12 15L18 9" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                                        </svg>
                                       </button>
-                                    )}
-                                  </th>
-                                  <th className="px-2 py-2 text-right">
-                                    <button
-                                      onClick={() => removeReviewBlock(block.id)}
-                                      className="h-6 w-6 flex items-center justify-center rounded-full ml-auto"
-                                      style={{ ...glassGhost, color: "rgba(255,100,100,0.7)" }}
-                                      title="Delete block"
-                                    >
-                                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none"><path d="M19 5L5 19M5 5l14 14" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" /></svg>
-                                    </button>
+                                      <button
+                                        onClick={() => removeReviewBlock(block.id)}
+                                        className="h-6 w-6 flex items-center justify-center rounded-full"
+                                        style={{ ...glassGhost, color: "rgba(255,100,100,0.7)" }}
+                                        title="Delete block"
+                                      >
+                                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none"><path d="M19 5L5 19M5 5l14 14" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" /></svg>
+                                      </button>
+                                    </div>
+                                    </div>
                                   </th>
                                 </tr>
-                                <tr style={{ borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
-                                  <th className="text-left px-3 py-3 text-xs font-semibold tracking-widest uppercase" style={{ color: "rgba(255,255,255,0.35)", borderRight: "1px solid rgba(255,255,255,0.05)" }}>Topic</th>
-                                  <th className="text-center px-3 py-3 text-xs font-semibold tracking-widest uppercase" style={{ color: "rgba(255,255,255,0.35)", width: 180, borderRight: "1px solid rgba(255,255,255,0.05)" }}>Weekly</th>
-                                  <th className="text-center px-3 py-3 text-xs font-semibold tracking-widest uppercase" style={{ color: "rgba(255,255,255,0.35)", width: 120, borderRight: "1px solid rgba(255,255,255,0.05)" }}>Biweekly</th>
-                                  <th className="text-center px-3 py-3 text-xs font-semibold tracking-widest uppercase" style={{ color: "rgba(255,255,255,0.35)", width: 70 }}>Monthly</th>
-                                  <th style={{ width: 32 }} />
-                                </tr>
+                                {!isCollapsed && (
+                                  <tr style={{ borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
+                                    <th className="text-left px-3 py-3 text-sm font-semibold tracking-widest uppercase" style={{ color: "rgba(255,255,255,0.35)", borderRight: "1px solid rgba(255,255,255,0.05)" }}>Topic</th>
+                                    <th className="text-center px-3 py-3 text-sm font-semibold tracking-widest uppercase" style={{ color: "rgba(255,255,255,0.35)", width: 180, borderRight: "1px solid rgba(255,255,255,0.05)" }}>Weekly</th>
+                                    <th className="text-center px-3 py-3 text-sm font-semibold tracking-widest uppercase" style={{ color: "rgba(255,255,255,0.35)", width: 120, borderRight: "1px solid rgba(255,255,255,0.05)" }}>Biweekly</th>
+                                    <th className="text-center px-3 py-3 text-sm font-semibold tracking-widest uppercase" style={{ color: "rgba(255,255,255,0.35)", width: 110 }}>Monthly</th>
+                                  </tr>
+                                )}
                               </thead>
-                              <tbody>
+                              {!isCollapsed && <tbody>
                                 {fronts.map((front) => (
                                   <tr
                                     key={front.id}
@@ -1467,14 +1628,37 @@ export default function Home() {
                                     onDragEnd={() => setDragTopicId(null)}
                                     style={{ borderBottom: "1px solid rgba(255,255,255,0.04)" }}
                                   >
-                                    <td className="px-3 py-2 text-sm" style={{ color: "rgba(255,255,255,0.68)", borderRight: "1px solid rgba(255,255,255,0.05)" }}>
-                                      <div className="flex items-center gap-2">
-                                        <span className="cursor-grab text-white/30" title="Drag to reorder">⋮⋮</span>
+                                    <td className="px-3 py-2 text-base" style={{ color: "rgba(255,255,255,0.72)", borderRight: "1px solid rgba(255,255,255,0.05)" }}>
+                                      <div
+                                        className="flex items-center gap-2"
+                                        onContextMenu={(e) => {
+                                          e.preventDefault();
+                                          setTopicEditor({
+                                            blockId: block.id,
+                                            frontId: front.id,
+                                            title: front.title,
+                                            color: front.color,
+                                            x: e.clientX,
+                                            y: e.clientY,
+                                          });
+                                        }}
+                                      >
+                                        <span
+                                          aria-hidden
+                                          style={{
+                                            width: 8,
+                                            height: 8,
+                                            minWidth: 8,
+                                            borderRadius: 999,
+                                            background: topicColorToHex(front.color),
+                                            boxShadow: `0 0 0 1px ${topicColorToHex(front.color)}55`,
+                                          }}
+                                        />
                                         <span>{front.title}</span>
                                       </div>
                                     </td>
                                     {(["weekly", "biweekly", "monthly"] as const).map((period) => (
-                                      <td key={period} className="text-center px-2 py-2" style={{ borderRight: period !== "monthly" ? "1px solid rgba(255,255,255,0.05)" : undefined }}>
+                                      <td key={period} className="text-center px-3 py-2" style={{ borderRight: period !== "monthly" ? "1px solid rgba(255,255,255,0.05)" : undefined }}>
                                         <div className="flex flex-wrap items-center justify-center gap-1">
                                           {front.checks[period].map((checked, checkIndex) => (
                                             <button
@@ -1482,12 +1666,12 @@ export default function Home() {
                                               onClick={() => toggleTopicCheck(block.id, front.id, period, checkIndex)}
                                               className="rounded-[3px] flex items-center justify-center transition-all duration-150 shrink-0"
                                               style={{
-                                                width: 13,
-                                                minWidth: 13,
-                                                maxWidth: 13,
-                                                height: 13,
-                                                minHeight: 13,
-                                                maxHeight: 13,
+                                                width: 17,
+                                                minWidth: 17,
+                                                maxWidth: 17,
+                                                height: 17,
+                                                minHeight: 17,
+                                                maxHeight: 17,
                                                 boxSizing: "border-box",
                                                 background: checked ? "#22C55E" : "rgba(255,255,255,0.04)",
                                                 border: checked ? "1px solid #22C55E" : "1px solid rgba(255,255,255,0.18)",
@@ -1495,7 +1679,7 @@ export default function Home() {
                                               aria-label={`Toggle ${period} ${checkIndex + 1}`}
                                             >
                                               {checked && (
-                                                <svg width="8" height="7" viewBox="0 0 12 9" fill="none">
+                                                <svg width="10" height="9" viewBox="0 0 12 9" fill="none">
                                                   <path d="M1 4L4.5 7.5L11 1" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
                                                 </svg>
                                               )}
@@ -1504,22 +1688,13 @@ export default function Home() {
                                         </div>
                                       </td>
                                     ))}
-                                    <td className="px-2 py-2">
-                                      <button
-                                        onClick={() => removeTopicFromBlock(block.id, front.id)}
-                                        className="w-5 h-5 flex items-center justify-center rounded opacity-30 hover:opacity-70 transition-opacity"
-                                        style={{ color: "rgba(255,255,255,0.8)" }}
-                                        title="Remove topic"
-                                      >
-                                        <svg width="9" height="9" viewBox="0 0 24 24" fill="none"><path d="M19 5L5 19M5 5l14 14" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" /></svg>
-                                      </button>
-                                    </td>
                                   </tr>
                                 ))}
 
                                 <tr style={{ borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
-                                  <td colSpan={5} className="px-2 py-2">
-                                    <div className="flex gap-2 items-center">
+                                  <td colSpan={4} className="px-2 py-2">
+                                    <div className="grid items-center gap-2" style={{ gridTemplateColumns: "1fr 102px" }}>
+                                      <div className="flex min-w-0 gap-2 items-center">
                                       <input
                                         type="text"
                                         value={blockInput.topic}
@@ -1534,6 +1709,7 @@ export default function Home() {
                                         className="flex-1 rounded-lg px-3 py-1.5 text-xs text-white outline-none placeholder:text-white/20"
                                         style={glassGhost}
                                       />
+                                      </div>
                                       <button
                                         onClick={() => {
                                           if (blockInput.topic.trim()) {
@@ -1541,7 +1717,7 @@ export default function Home() {
                                             setBlockInput({ topic: "" });
                                           }
                                         }}
-                                        className="rounded-lg px-3 py-1.5 text-xs text-white"
+                                        className="w-full rounded-lg px-3 py-1.5 text-xs text-white"
                                         style={glassPill}
                                       >
                                         + Topic
@@ -1549,7 +1725,7 @@ export default function Home() {
                                     </div>
                                   </td>
                                 </tr>
-                              </tbody>
+                              </tbody>}
                             </table>
                           </div>
                         </div>
@@ -1564,6 +1740,96 @@ export default function Home() {
                   <button onClick={() => addReviewBlock()} className="label rounded-full px-5 py-2 text-white" style={glassPill}>+ Add Block</button>
                 </div>
               )}
+            </div>
+          )}
+
+          {topicEditor && (
+            <div
+              className="fixed z-50 rounded-xl p-3 min-w-[220px]"
+              style={{
+                ...glassPill,
+                left: topicEditor.x + 8,
+                top: topicEditor.y + 8,
+                background: "rgba(10,10,18,0.95)",
+              }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <p className="text-[10px] uppercase tracking-[0.1em] mb-2" style={{ color: "rgba(255,255,255,0.45)" }}>Edit topic</p>
+              <input
+                value={topicEditor.title}
+                onChange={(e) => setTopicEditor((prev) => (prev ? { ...prev, title: e.target.value } : null))}
+                className="w-full rounded-lg px-2.5 py-1.5 text-xs text-white outline-none mb-2"
+                style={glassGhost}
+                autoFocus
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    applyTopicEditorChanges(topicEditor.blockId, topicEditor.frontId, {
+                      title: topicEditor.title,
+                      color: topicEditor.color,
+                    });
+                    setTopicEditor(null);
+                  }
+                  if (e.key === "Escape") {
+                    setTopicEditor(null);
+                  }
+                }}
+              />
+              <div className="flex items-center gap-2 mb-2">
+                {TOPIC_COLOR_OPTIONS.map((colorOption) => {
+                  const active = topicEditor.color === colorOption.id;
+                  return (
+                    <button
+                      key={`editor-${colorOption.id}`}
+                      type="button"
+                      onClick={() => setTopicEditor((prev) => (prev ? { ...prev, color: colorOption.id } : null))}
+                      className="rounded-full"
+                      style={{
+                        width: 13,
+                        height: 13,
+                        minWidth: 13,
+                        background: colorOption.value,
+                        boxShadow: active ? `0 0 0 1.5px ${colorOption.value}, 0 0 0 3px rgba(255,255,255,0.3)` : `0 0 0 1px ${colorOption.value}66`,
+                      }}
+                      aria-label={`Set ${colorOption.label} color`}
+                    />
+                  );
+                })}
+              </div>
+              <div className="flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    removeTopicFromBlock(topicEditor.blockId, topicEditor.frontId);
+                    setTopicEditor(null);
+                  }}
+                  className="rounded-lg px-2.5 py-1 text-xs"
+                  style={{ ...glassGhost, color: "rgba(255,120,120,0.95)", borderColor: "rgba(255,120,120,0.45)" }}
+                >
+                  Delete
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setTopicEditor(null)}
+                  className="rounded-lg px-2.5 py-1 text-xs"
+                  style={{ ...glassGhost, color: "rgba(255,255,255,0.68)" }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    applyTopicEditorChanges(topicEditor.blockId, topicEditor.frontId, {
+                      title: topicEditor.title,
+                      color: topicEditor.color,
+                    });
+                    setTopicEditor(null);
+                  }}
+                  className="rounded-lg px-2.5 py-1 text-xs text-white"
+                  style={glassPill}
+                >
+                  Save
+                </button>
+              </div>
             </div>
           )}
           {/* Always-mounted player — key only changes on URL/reload, never on tab switch */}
@@ -1612,12 +1878,13 @@ export default function Home() {
 
       {settingsOpen && (
         <SettingsModal
-          key={`${timerDurations.focus}-${timerDurations.shortBreak}-${timerDurations.longBreak}-${customMotivationalPhrase}-${reviewCheckConfig.weekly}-${reviewCheckConfig.biweekly}-${reviewCheckConfig.monthly}`}
+          key={`${timerDurations.focus}-${timerDurations.shortBreak}-${timerDurations.longBreak}-${customMotivationalPhrase}-${reviewCheckConfig.weekly}-${reviewCheckConfig.biweekly}-${reviewCheckConfig.monthly}-${beepVolume}`}
           onClose={() => setSettingsOpen(false)}
           focusMinutes={Math.round(timerDurations.focus / 60)}
           shortBreakMinutes={Math.round(timerDurations.shortBreak / 60)}
           longBreakMinutes={Math.round(timerDurations.longBreak / 60)}
           reviewChecklist={reviewCheckConfig}
+          beepVolume={beepVolume}
           timerSystemMode={timerSystemMode}
           motivationalPhrase={customMotivationalPhrase}
           onResetHeatmaps={() => {
@@ -1631,6 +1898,7 @@ export default function Home() {
               setChronoBreakRemaining(0);
             }
             setReviewCheckConfig(payload.reviewChecklist);
+            setBeepVolume(payload.beepVolume);
             setTimerSystemMode(payload.mode);
             setSettingsOpen(false);
           }}

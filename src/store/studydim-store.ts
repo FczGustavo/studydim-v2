@@ -23,6 +23,7 @@ import type {
   StudyTopic,
   Task,
   TimerMode,
+  TopicColor,
 } from "@/types/domain";
 
 type AppTab = "focus" | "tasks" | "sound" | "journal" | "review" | "settings";
@@ -61,6 +62,16 @@ const DEFAULT_REVIEW_CHECK_CONFIG: ReviewCheckConfig = {
   monthly: 1,
 };
 
+const TOPIC_COLORS: TopicColor[] = ["gray", "blue", "green", "red", "orange", "yellow"];
+const DEFAULT_TOPIC_COLOR: TopicColor = "gray";
+
+const normalizeTopicColor = (color: unknown): TopicColor => {
+  if (typeof color === "string" && TOPIC_COLORS.includes(color as TopicColor)) {
+    return color as TopicColor;
+  }
+  return DEFAULT_TOPIC_COLOR;
+};
+
 const clampChecklistCount = (value: number): number =>
   Math.max(1, Math.min(12, Math.round(value)));
 
@@ -94,6 +105,9 @@ const normalizeFrontChecks = (
   };
 };
 
+const normalizeFrontColor = (front: Partial<ReviewFront> | undefined): TopicColor =>
+  normalizeTopicColor(front?.color);
+
 const ensureTopicSubject = (subjects: ReviewSubject[] | undefined, blockId: string): ReviewSubject => {
   if (subjects?.[0]) {
     return {
@@ -126,6 +140,7 @@ const normalizeReviewBlocks = (
     topicSubject.fronts = combinedFronts.map((front, frontIndex) => ({
       ...front,
       id: front.id || `front-${block.id}-${frontIndex}`,
+      color: normalizeFrontColor(front),
       checks: normalizeFrontChecks(front.checks, checkConfig),
     }));
 
@@ -150,6 +165,7 @@ interface StudydimState {
   timerRunning: boolean;
   focusCyclesCompleted: number;
   modeSwitchedAt?: string;
+  beepVolume: number;
   customMotivationalPhrase: string;
   dailyRatings: Record<string, number>;
   dailyNotes: Record<string, string>;
@@ -176,6 +192,7 @@ interface StudydimState {
     shortBreak: number;
     longBreak: number;
   }) => void;
+  setBeepVolume: (volume: number) => void;
   setCustomMotivationalPhrase: (phrase: string) => void;
   setDailyRating: (dateKey: string, rating: number) => void;
   setDailyNote: (dateKey: string, note: string) => void;
@@ -206,6 +223,7 @@ interface StudydimState {
   updateReviewBlockName: (blockId: string, name: string) => void;
   setReviewCheckConfig: (config: ReviewCheckConfig) => void;
   addTopicToBlock: (blockId: string, title: string) => void;
+  updateTopicInBlock: (blockId: string, frontId: string, patch: { title?: string; color?: TopicColor }) => void;
   removeTopicFromBlock: (blockId: string, frontId: string) => void;
   toggleTopicCheck: (blockId: string, frontId: string, period: "weekly" | "biweekly" | "monthly", index: number) => void;
   moveTopicInBlock: (blockId: string, fromIndex: number, toIndex: number) => void;
@@ -227,6 +245,7 @@ export const useStudydimStore = create<StudydimState>()(
       timerRunning: false,
       focusCyclesCompleted: 0,
       modeSwitchedAt: undefined,
+      beepVolume: 0.5,
       customMotivationalPhrase: "",
       dailyRatings: {},
       dailyNotes: {},
@@ -281,6 +300,11 @@ export const useStudydimStore = create<StudydimState>()(
             timerRunning: false,
             modeSwitchedAt: new Date().toISOString(),
           };
+        }),
+
+      setBeepVolume: (volume) =>
+        set({
+          beepVolume: Math.max(0, Math.min(1, Number.isFinite(volume) ? volume : 0.5)),
         }),
 
       setCustomMotivationalPhrase: (phrase) =>
@@ -627,9 +651,38 @@ export const useStudydimStore = create<StudydimState>()(
                     {
                       id: `front-${Date.now()}`,
                       title: normalizedTitle,
+                      color: DEFAULT_TOPIC_COLOR,
                       checks: normalizeFrontChecks(undefined, state.reviewCheckConfig),
                     },
                   ],
+                },
+              ],
+            };
+          }),
+        }));
+      },
+
+      updateTopicInBlock: (blockId, frontId, patch) => {
+        set((state) => ({
+          reviewBlocks: state.reviewBlocks.map((block) => {
+            if (block.id !== blockId) return block;
+            const subject = ensureTopicSubject(block.subjects, block.id);
+            const normalizedTitle = typeof patch.title === "string" ? patch.title.trim() : undefined;
+            const normalizedColor = patch.color ? normalizeTopicColor(patch.color) : undefined;
+
+            return {
+              ...block,
+              subjects: [
+                {
+                  ...subject,
+                  fronts: subject.fronts.map((front) => {
+                    if (front.id !== frontId) return front;
+                    return {
+                      ...front,
+                      title: normalizedTitle || front.title,
+                      color: normalizedColor ?? normalizeFrontColor(front),
+                    };
+                  }),
                 },
               ],
             };
@@ -746,6 +799,7 @@ export const useStudydimStore = create<StudydimState>()(
                     {
                       id: `front-${Date.now()}`,
                       title,
+                      color: DEFAULT_TOPIC_COLOR,
                       checks: normalizeFrontChecks(undefined, state.reviewCheckConfig),
                     },
                   ],
@@ -793,15 +847,16 @@ export const useStudydimStore = create<StudydimState>()(
     }),
     {
       name: "studydim-local-state",
-      version: 3,
+      version: 5,
       storage: createJSONStorage(() => localStorage),
       migrate: (persistedState) => {
         if (!persistedState || typeof persistedState !== "object") return persistedState;
 
-        const state = persistedState as StudydimState & { reviewCheckConfig?: Partial<ReviewCheckConfig> };
+        const state = persistedState as StudydimState & { reviewCheckConfig?: Partial<ReviewCheckConfig>; beepVolume?: number };
         const normalizedConfig = normalizeReviewCheckConfig(state.reviewCheckConfig);
         return {
           ...state,
+          beepVolume: Math.max(0, Math.min(1, Number.isFinite(state.beepVolume) ? state.beepVolume : 0.5)),
           reviewCheckConfig: normalizedConfig,
           reviewBlocks: normalizeReviewBlocks(state.reviewBlocks, normalizedConfig),
         };
@@ -815,6 +870,7 @@ export const useStudydimStore = create<StudydimState>()(
         timerRunning: state.timerRunning,
         focusCyclesCompleted: state.focusCyclesCompleted,
         modeSwitchedAt: state.modeSwitchedAt,
+        beepVolume: state.beepVolume,
         customMotivationalPhrase: state.customMotivationalPhrase,
         dailyRatings: state.dailyRatings,
         dailyNotes: state.dailyNotes,
