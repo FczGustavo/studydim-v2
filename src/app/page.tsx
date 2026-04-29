@@ -1074,6 +1074,15 @@ export default function Home() {
     const targetBlockId = reviewSearchMatches.firstBlockMatchId;
 
     if (targetTopicKey) {
+      const topicBlockId = targetTopicKey.split("::")[0];
+      if (collapsedBlocks[topicBlockId]) {
+        setCollapsedBlocks((prev) => ({
+          ...prev,
+          [topicBlockId]: false,
+        }));
+        return;
+      }
+
       const targetNode = topicRowRefs.current[targetTopicKey];
       if (targetNode) {
         targetNode.scrollIntoView({ behavior: "smooth", block: "center" });
@@ -1083,6 +1092,14 @@ export default function Home() {
     }
 
     if (targetBlockId) {
+      if (collapsedBlocks[targetBlockId]) {
+        setCollapsedBlocks((prev) => ({
+          ...prev,
+          [targetBlockId]: false,
+        }));
+        return;
+      }
+
       const blockNode = blockCardRefs.current[targetBlockId];
       if (blockNode) {
         blockNode.scrollIntoView({ behavior: "smooth", block: "center" });
@@ -1092,7 +1109,7 @@ export default function Home() {
     }
 
     setFocusedReviewItem(null);
-  }, [reviewQuery, reviewSearchMatches.firstBlockMatchId, reviewSearchMatches.firstTopicMatchKey]);
+  }, [collapsedBlocks, reviewQuery, reviewSearchMatches.firstBlockMatchId, reviewSearchMatches.firstTopicMatchKey]);
 
   const previousSwitchRef = useRef(modeSwitchedAt);
   const lastTickAtRef = useRef<number | null>(null);
