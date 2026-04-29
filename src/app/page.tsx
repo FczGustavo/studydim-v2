@@ -465,6 +465,8 @@ function SettingsModal({
   longBreakMinutes,
   reviewChecklist,
   beepVolume,
+  timerBeepEnabled,
+  reviewBeepEnabled,
   timerSystemMode,
   motivationalPhrase,
   onSave,
@@ -476,9 +478,21 @@ function SettingsModal({
   longBreakMinutes: number;
   reviewChecklist: { weekly: number; biweekly: number; monthly: number };
   beepVolume: number;
+  timerBeepEnabled: boolean;
+  reviewBeepEnabled: boolean;
   timerSystemMode: "pomodoro" | "chronometer";
   motivationalPhrase: string;
-  onSave: (payload: { focus: number; shortBreak: number; longBreak: number; phrase: string; mode: "pomodoro" | "chronometer"; reviewChecklist: { weekly: number; biweekly: number; monthly: number }; beepVolume: number }) => void;
+  onSave: (payload: {
+    focus: number;
+    shortBreak: number;
+    longBreak: number;
+    phrase: string;
+    mode: "pomodoro" | "chronometer";
+    reviewChecklist: { weekly: number; biweekly: number; monthly: number };
+    beepVolume: number;
+    timerBeepEnabled: boolean;
+    reviewBeepEnabled: boolean;
+  }) => void;
   onResetHeatmaps: () => void;
 }) {
   const [focus, setFocus] = useState(focusMinutes);
@@ -490,22 +504,8 @@ function SettingsModal({
   const [biweeklyChecks, setBiweeklyChecks] = useState(reviewChecklist.biweekly);
   const [monthlyChecks, setMonthlyChecks] = useState(reviewChecklist.monthly);
   const [beepVolumePercent, setBeepVolumePercent] = useState(Math.round(beepVolume * 100));
-
-  const playTestBeep = useCallback(() => {
-    const ctx = new window.AudioContext();
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    osc.type = "sine";
-    osc.frequency.value = 620;
-    gain.gain.value = Math.max(0, Math.min(100, beepVolumePercent)) / 100 * 0.08;
-    osc.connect(gain);
-    gain.connect(ctx.destination);
-    osc.start();
-    osc.stop(ctx.currentTime + 0.22);
-    window.setTimeout(() => {
-      void ctx.close();
-    }, 300);
-  }, [beepVolumePercent]);
+  const [timerBeepsOn, setTimerBeepsOn] = useState(timerBeepEnabled);
+  const [reviewBeepsOn, setReviewBeepsOn] = useState(reviewBeepEnabled);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
@@ -567,15 +567,31 @@ function SettingsModal({
               onChange={(e) => setBeepVolumePercent(Number(e.target.value))}
               className="mt-2 w-full accent-white"
             />
+          </label>
+
+          <div className="flex items-center justify-between rounded-xl px-3 py-2" style={glassGhost}>
+            <p className="text-xs text-white/75">Timer beep</p>
             <button
               type="button"
-              onClick={playTestBeep}
-              className="mt-2 rounded-lg px-3 py-1.5 text-xs text-white"
-              style={glassGhost}
+              onClick={() => setTimerBeepsOn((prev) => !prev)}
+              className="label rounded-full px-3 py-1 text-[10px]"
+              style={timerBeepsOn ? { ...glassPill, ...glassActive, color: "rgba(255,255,255,0.9)" } : { ...glassGhost, color: "rgba(255,255,255,0.58)" }}
             >
-              Test beep
+              {timerBeepsOn ? "ON" : "OFF"}
             </button>
-          </label>
+          </div>
+
+          <div className="flex items-center justify-between rounded-xl px-3 py-2" style={glassGhost}>
+            <p className="text-xs text-white/75">Review beep</p>
+            <button
+              type="button"
+              onClick={() => setReviewBeepsOn((prev) => !prev)}
+              className="label rounded-full px-3 py-1 text-[10px]"
+              style={reviewBeepsOn ? { ...glassPill, ...glassActive, color: "rgba(255,255,255,0.9)" } : { ...glassGhost, color: "rgba(255,255,255,0.58)" }}
+            >
+              {reviewBeepsOn ? "ON" : "OFF"}
+            </button>
+          </div>
 
           <label className="block text-xs text-white/70">
             Custom motivational phrase
@@ -614,6 +630,8 @@ function SettingsModal({
                     monthly: Math.max(1, Math.min(12, Math.round(monthlyChecks))),
                   },
                   beepVolume: Math.max(0, Math.min(100, Math.round(beepVolumePercent))) / 100,
+                  timerBeepEnabled: timerBeepsOn,
+                  reviewBeepEnabled: reviewBeepsOn,
                 })
               }
               className="h-10 w-28 rounded-full text-xs text-white"
@@ -863,6 +881,8 @@ export default function Home() {
     focusCyclesCompleted,
     modeSwitchedAt,
     beepVolume,
+    timerBeepEnabled,
+    reviewBeepEnabled,
     customMotivationalPhrase,
     dailyNotes,
     tasks,
@@ -875,6 +895,8 @@ export default function Home() {
     setTimerMode,
     updateTimerDurations,
     setBeepVolume,
+    setTimerBeepEnabled,
+    setReviewBeepEnabled,
     setCustomMotivationalPhrase,
     setDailyNote,
     toggleTimer,
@@ -900,6 +922,7 @@ export default function Home() {
     removeTopicFromBlock,
     toggleTopicCheck,
     moveTopicInBlock,
+    moveTopicAcrossBlocks,
   } = useStudydimStore();
 
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -927,16 +950,21 @@ export default function Home() {
   // Review tab states
   const [reviewBlockInputs, setReviewBlockInputs] = useState<Record<string, { topic: string }>>({});
   const [editingBlockId, setEditingBlockId] = useState<string | null>(null);
-  const [dragTopicId, setDragTopicId] = useState<string | null>(null);
+  const [dragTopic, setDragTopic] = useState<{ blockId: string; frontId: string } | null>(null);
   const [collapsedBlocks, setCollapsedBlocks] = useState<Record<string, boolean>>({});
+  const [reviewSearch, setReviewSearch] = useState("");
+  const [focusedReviewItem, setFocusedReviewItem] = useState<string | null>(null);
   const [topicEditor, setTopicEditor] = useState<{
     blockId: string;
     frontId: string;
     title: string;
+    detail: string;
     color: TopicColor;
     x: number;
     y: number;
   } | null>(null);
+  const topicRowRefs = useRef<Record<string, HTMLTableRowElement | null>>({});
+  const blockCardRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
   // Reactive today — updates exactly at midnight without page reload
   const [todayKey, setTodayKey] = useState(() => toLocalDateKey(new Date()));
@@ -958,7 +986,7 @@ export default function Home() {
     return () => window.removeEventListener("click", onWindowClick);
   }, []);
 
-  const applyTopicEditorChanges = useCallback((blockId: string, frontId: string, patch: { title?: string; color?: TopicColor }) => {
+  const applyTopicEditorChanges = useCallback((blockId: string, frontId: string, patch: { title?: string; detail?: string; color?: TopicColor }) => {
     if (typeof updateTopicInBlock === "function") {
       updateTopicInBlock(blockId, frontId, patch);
       return;
@@ -971,6 +999,7 @@ export default function Home() {
         if (!subject) return block;
 
         const normalizedTitle = typeof patch.title === "string" ? patch.title.trim() : undefined;
+        const normalizedDetail = typeof patch.detail === "string" ? patch.detail.trim() : undefined;
         return {
           ...block,
           subjects: [
@@ -982,6 +1011,7 @@ export default function Home() {
                   : {
                       ...front,
                       title: normalizedTitle || front.title,
+                      detail: patch.detail === undefined ? front.detail : normalizedDetail,
                       color: patch.color ?? front.color,
                     },
               ),
@@ -992,9 +1022,119 @@ export default function Home() {
     }));
   }, [updateTopicInBlock]);
 
+  const sortedReviewBlocks = useMemo(
+    () => reviewBlocks.slice().sort((a, b) => a.order - b.order),
+    [reviewBlocks],
+  );
+
+  const reviewQuery = reviewSearch.trim().toLowerCase();
+
+  const reviewSearchMatches = useMemo(() => {
+    if (!reviewQuery) {
+      return {
+        blockMatches: new Set<string>(),
+        topicMatches: new Set<string>(),
+        firstTopicMatchKey: null as string | null,
+        firstBlockMatchId: null as string | null,
+      };
+    }
+
+    const blockMatches = new Set<string>();
+    const topicMatches = new Set<string>();
+    let firstTopicMatchKey: string | null = null;
+    let firstBlockMatchId: string | null = null;
+
+    sortedReviewBlocks.forEach((block) => {
+      const blockMatched = block.name.toLowerCase().includes(reviewQuery);
+      if (blockMatched) {
+        blockMatches.add(block.id);
+        if (!firstBlockMatchId) firstBlockMatchId = block.id;
+      }
+
+      const fronts = block.subjects[0]?.fronts ?? [];
+      fronts.forEach((front) => {
+        if (front.title.toLowerCase().includes(reviewQuery)) {
+          const key = `${block.id}::${front.id}`;
+          topicMatches.add(key);
+          if (!firstTopicMatchKey) firstTopicMatchKey = key;
+        }
+      });
+    });
+
+    return { blockMatches, topicMatches, firstTopicMatchKey, firstBlockMatchId };
+  }, [reviewQuery, sortedReviewBlocks]);
+
+  useEffect(() => {
+    if (!reviewQuery) {
+      setFocusedReviewItem(null);
+      return;
+    }
+
+    const targetTopicKey = reviewSearchMatches.firstTopicMatchKey;
+    const targetBlockId = reviewSearchMatches.firstBlockMatchId;
+
+    if (targetTopicKey) {
+      const targetNode = topicRowRefs.current[targetTopicKey];
+      if (targetNode) {
+        targetNode.scrollIntoView({ behavior: "smooth", block: "center" });
+        setFocusedReviewItem(targetTopicKey);
+      }
+      return;
+    }
+
+    if (targetBlockId) {
+      const blockNode = blockCardRefs.current[targetBlockId];
+      if (blockNode) {
+        blockNode.scrollIntoView({ behavior: "smooth", block: "center" });
+        setFocusedReviewItem(targetBlockId);
+      }
+      return;
+    }
+
+    setFocusedReviewItem(null);
+  }, [reviewQuery, reviewSearchMatches.firstBlockMatchId, reviewSearchMatches.firstTopicMatchKey]);
+
   const previousSwitchRef = useRef(modeSwitchedAt);
   const lastTickAtRef = useRef<number | null>(null);
   const chronoLastTickAtRef = useRef<number | null>(null);
+  const timerBeepEnabledRef = useRef(timerBeepEnabled);
+
+  useEffect(() => {
+    timerBeepEnabledRef.current = timerBeepEnabled;
+  }, [timerBeepEnabled]);
+
+  const playCheckBeep = useCallback(() => {
+    if (!reviewBeepEnabled) return;
+    const ctx = new window.AudioContext();
+    const now = ctx.currentTime;
+    const master = ctx.createGain();
+    const base = Math.max(0, Math.min(1, beepVolume));
+
+    master.gain.setValueAtTime(0.0001, now);
+    master.gain.exponentialRampToValueAtTime(0.09 * Math.max(0.25, base), now + 0.015);
+    master.gain.exponentialRampToValueAtTime(0.0001, now + 0.22);
+    master.connect(ctx.destination);
+
+    const oscA = ctx.createOscillator();
+    oscA.type = "sine";
+    oscA.frequency.setValueAtTime(740, now);
+    oscA.frequency.exponentialRampToValueAtTime(820, now + 0.09);
+    oscA.connect(master);
+
+    const oscB = ctx.createOscillator();
+    oscB.type = "sine";
+    oscB.frequency.setValueAtTime(1110, now);
+    oscB.connect(master);
+
+    oscA.start(now);
+    oscB.start(now + 0.01);
+    oscA.stop(now + 0.22);
+    oscB.stop(now + 0.16);
+
+    window.setTimeout(() => {
+      void ctx.close();
+    }, 300);
+  }, [beepVolume, reviewBeepEnabled]);
 
   const syncTimerWithElapsed = useCallback(() => {
     if (!timerRunning || timerSystemMode !== "pomodoro") return;
@@ -1100,6 +1240,8 @@ export default function Home() {
   useEffect(() => {
     if (!modeSwitchedAt || modeSwitchedAt === previousSwitchRef.current) return;
     previousSwitchRef.current = modeSwitchedAt;
+    if (!timerBeepEnabledRef.current) return;
+
     const ctx = new window.AudioContext();
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
@@ -1110,6 +1252,7 @@ export default function Home() {
     gain.connect(ctx.destination);
     osc.start();
     osc.stop(ctx.currentTime + 0.25);
+
     setTimeout(() => ctx.close().catch(() => undefined), 400);
   }, [modeSwitchedAt, timerMode]);
 
@@ -1511,37 +1654,59 @@ export default function Home() {
           {appTab === "review" && (
             <div className="w-full pt-1 sm:pt-0 review-zoom">
               {/* Header */}
-              <div className="flex items-center justify-between mb-6 px-1">
+              <div className="flex items-center justify-between mb-6 px-1 gap-2 flex-wrap">
                 <div>
                   <h2 className="text-base font-semibold tracking-wide" style={{ color: "rgba(255,255,255,0.8)" }}>Study Review</h2>
                   <p className="text-xs mt-0.5" style={{ color: "rgba(255,255,255,0.35)" }}>Track your revision schedule</p>
                 </div>
-                <button
-                  onClick={() => addReviewBlock()}
-                  className="label rounded-full px-4 py-2 text-white text-xs"
-                  style={glassPill}
-                >
-                  + Add Block
-                </button>
+                <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-1.5 rounded-full px-3 py-1.5" style={glassGhost}>
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" aria-hidden="true" style={{ color: "rgba(255,255,255,0.6)" }}>
+                      <circle cx="11" cy="11" r="7" stroke="currentColor" strokeWidth="1.8" />
+                      <path d="M16.5 16.5L21 21" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+                    </svg>
+                    <input
+                      value={reviewSearch}
+                      onChange={(e) => setReviewSearch(e.target.value)}
+                      placeholder="Search block or topic"
+                      className="w-44 bg-transparent text-xs text-white outline-none placeholder:text-white/30"
+                    />
+                  </div>
+                  <button
+                    onClick={() => addReviewBlock()}
+                    className="label rounded-full px-4 py-2 text-white text-xs"
+                    style={glassPill}
+                  >
+                    + Add Block
+                  </button>
+                </div>
               </div>
 
               {/* Blocks */}
               {reviewBlocks.length > 0 && (
                 <div className="grid grid-cols-1 gap-6">
-                  {reviewBlocks
-                    .slice()
-                    .sort((a, b) => a.order - b.order)
-                    .map((block) => {
+                  {sortedReviewBlocks.map((block) => {
                       const topicSubject = block.subjects[0];
                       const fronts = topicSubject?.fronts ?? [];
                       const isCollapsed = Boolean(collapsedBlocks[block.id]);
+                      const blockMatched = reviewSearchMatches.blockMatches.has(block.id);
                       const blockInput = reviewBlockInputs[block.id] ?? { topic: "" };
                       const setBlockInput = (patch: Partial<typeof blockInput>) =>
                         setReviewBlockInputs((prev) => ({ ...prev, [block.id]: { ...blockInput, ...patch } }));
 
                       return (
-                        <div key={block.id} className="w-full">
-                          <div className="rounded-2xl overflow-x-auto" style={{ ...glassGhost, border: "1px solid rgba(255,255,255,0.1)" }}>
+                        <div key={block.id} className="w-full" ref={(node) => { blockCardRefs.current[block.id] = node; }}>
+                          <div
+                            className="rounded-2xl overflow-x-auto"
+                            style={{
+                              ...glassGhost,
+                              border: "1px solid rgba(255,255,255,0.1)",
+                              boxShadow:
+                                focusedReviewItem === block.id || blockMatched
+                                  ? "0 0 0 1px rgba(255,255,255,0.45), 0 0 24px rgba(255,255,255,0.08)"
+                                  : undefined,
+                            }}
+                          >
                             <table className="w-full border-collapse" style={{ minWidth: 600 }}>
                               <thead>
                                 <tr style={{ background: "rgba(255,255,255,0.04)", borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
@@ -1621,29 +1786,45 @@ export default function Home() {
                                   <tr
                                     key={front.id}
                                     draggable
-                                    onDragStart={() => setDragTopicId(front.id)}
+                                    ref={(node) => {
+                                      topicRowRefs.current[`${block.id}::${front.id}`] = node;
+                                    }}
+                                    onDragStart={() => setDragTopic({ blockId: block.id, frontId: front.id })}
                                     onDragOver={(e) => e.preventDefault()}
                                     onDrop={() => {
-                                      if (!dragTopicId) return;
-                                      const fromIndex = fronts.findIndex((item) => item.id === dragTopicId);
+                                      if (!dragTopic) return;
+                                      if (dragTopic.blockId !== block.id) {
+                                        const toIndex = fronts.findIndex((item) => item.id === front.id);
+                                        moveTopicAcrossBlocks(dragTopic.blockId, block.id, dragTopic.frontId, toIndex < 0 ? fronts.length : toIndex);
+                                        setDragTopic(null);
+                                        return;
+                                      }
+                                      const fromIndex = fronts.findIndex((item) => item.id === dragTopic.frontId);
                                       const toIndex = fronts.findIndex((item) => item.id === front.id);
                                       if (fromIndex >= 0 && toIndex >= 0) {
                                         moveTopicInBlock(block.id, fromIndex, toIndex);
                                       }
-                                      setDragTopicId(null);
+                                      setDragTopic(null);
                                     }}
-                                    onDragEnd={() => setDragTopicId(null)}
-                                    style={{ borderBottom: "1px solid rgba(255,255,255,0.04)" }}
+                                    onDragEnd={() => setDragTopic(null)}
+                                    style={{
+                                      borderBottom: "1px solid rgba(255,255,255,0.04)",
+                                      background:
+                                        focusedReviewItem === `${block.id}::${front.id}` || reviewSearchMatches.topicMatches.has(`${block.id}::${front.id}`)
+                                          ? "rgba(255,255,255,0.08)"
+                                          : undefined,
+                                    }}
                                   >
                                     <td className="px-3 py-2 text-base" style={{ color: "rgba(255,255,255,0.72)", borderRight: "1px solid rgba(255,255,255,0.05)" }}>
                                       <div
-                                        className="flex items-center gap-2"
+                                        className="group flex items-center gap-2"
                                         onContextMenu={(e) => {
                                           e.preventDefault();
                                           setTopicEditor({
                                             blockId: block.id,
                                             frontId: front.id,
                                             title: front.title,
+                                            detail: front.detail ?? "",
                                             color: front.color,
                                             x: e.clientX,
                                             y: e.clientY,
@@ -1662,6 +1843,11 @@ export default function Home() {
                                           }}
                                         />
                                         <span>{front.title}</span>
+                                        {front.detail && (
+                                          <span className="max-w-0 overflow-hidden whitespace-nowrap text-xs opacity-0 transition-all duration-200 group-hover:max-w-[280px] group-hover:opacity-75" style={{ color: "rgba(255,255,255,0.56)" }}>
+                                            {`: ${front.detail}`}
+                                          </span>
+                                        )}
                                       </div>
                                     </td>
                                     {(["weekly", "biweekly", "monthly"] as const).map((period) => (
@@ -1670,7 +1856,10 @@ export default function Home() {
                                           {front.checks[period].map((checked, checkIndex) => (
                                             <button
                                               key={`${front.id}-${period}-${checkIndex}`}
-                                              onClick={() => toggleTopicCheck(block.id, front.id, period, checkIndex)}
+                                              onClick={() => {
+                                                toggleTopicCheck(block.id, front.id, period, checkIndex);
+                                                playCheckBeep();
+                                              }}
                                               className="rounded-[3px] flex items-center justify-center transition-all duration-150 shrink-0"
                                               style={{
                                                 width: 17,
@@ -1698,7 +1887,23 @@ export default function Home() {
                                   </tr>
                                 ))}
 
-                                <tr style={{ borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
+                                <tr
+                                  style={{ borderBottom: "1px solid rgba(255,255,255,0.06)" }}
+                                  onDragOver={(e) => e.preventDefault()}
+                                  onDrop={() => {
+                                    if (!dragTopic) return;
+                                    if (dragTopic.blockId !== block.id) {
+                                      moveTopicAcrossBlocks(dragTopic.blockId, block.id, dragTopic.frontId, fronts.length);
+                                      setDragTopic(null);
+                                      return;
+                                    }
+                                    const fromIndex = fronts.findIndex((item) => item.id === dragTopic.frontId);
+                                    if (fromIndex >= 0 && fromIndex !== fronts.length - 1) {
+                                      moveTopicInBlock(block.id, fromIndex, fronts.length - 1);
+                                    }
+                                    setDragTopic(null);
+                                  }}
+                                >
                                   <td colSpan={4} className="px-2 py-2">
                                     <div className="grid items-center gap-2" style={{ gridTemplateColumns: "1fr 102px" }}>
                                       <div className="flex min-w-0 gap-2 items-center">
@@ -1772,6 +1977,7 @@ export default function Home() {
                   if (e.key === "Enter") {
                     applyTopicEditorChanges(topicEditor.blockId, topicEditor.frontId, {
                       title: topicEditor.title,
+                      detail: topicEditor.detail,
                       color: topicEditor.color,
                     });
                     setTopicEditor(null);
@@ -1780,6 +1986,16 @@ export default function Home() {
                     setTopicEditor(null);
                   }
                 }}
+              />
+              <label className="block text-[10px] uppercase tracking-[0.1em] mb-1" style={{ color: "rgba(255,255,255,0.45)" }}>
+                Add detail
+              </label>
+              <input
+                value={topicEditor.detail}
+                onChange={(e) => setTopicEditor((prev) => (prev ? { ...prev, detail: e.target.value } : null))}
+                className="w-full rounded-lg px-2.5 py-1.5 text-xs text-white outline-none mb-2"
+                style={glassGhost}
+                placeholder="Extra context for this topic"
               />
               <div className="flex items-center gap-2 mb-2">
                 {TOPIC_COLOR_OPTIONS.map((colorOption) => {
@@ -1827,6 +2043,7 @@ export default function Home() {
                   onClick={() => {
                     applyTopicEditorChanges(topicEditor.blockId, topicEditor.frontId, {
                       title: topicEditor.title,
+                      detail: topicEditor.detail,
                       color: topicEditor.color,
                     });
                     setTopicEditor(null);
@@ -1885,13 +2102,15 @@ export default function Home() {
 
       {settingsOpen && (
         <SettingsModal
-          key={`${timerDurations.focus}-${timerDurations.shortBreak}-${timerDurations.longBreak}-${customMotivationalPhrase}-${reviewCheckConfig.weekly}-${reviewCheckConfig.biweekly}-${reviewCheckConfig.monthly}-${beepVolume}`}
+          key={`${timerDurations.focus}-${timerDurations.shortBreak}-${timerDurations.longBreak}-${customMotivationalPhrase}-${reviewCheckConfig.weekly}-${reviewCheckConfig.biweekly}-${reviewCheckConfig.monthly}-${beepVolume}-${timerBeepEnabled}-${reviewBeepEnabled}`}
           onClose={() => setSettingsOpen(false)}
           focusMinutes={Math.round(timerDurations.focus / 60)}
           shortBreakMinutes={Math.round(timerDurations.shortBreak / 60)}
           longBreakMinutes={Math.round(timerDurations.longBreak / 60)}
           reviewChecklist={reviewCheckConfig}
           beepVolume={beepVolume}
+          timerBeepEnabled={timerBeepEnabled}
+          reviewBeepEnabled={reviewBeepEnabled}
           timerSystemMode={timerSystemMode}
           motivationalPhrase={customMotivationalPhrase}
           onResetHeatmaps={() => {
@@ -1906,6 +2125,8 @@ export default function Home() {
             }
             setReviewCheckConfig(payload.reviewChecklist);
             setBeepVolume(payload.beepVolume);
+            setTimerBeepEnabled(payload.timerBeepEnabled);
+            setReviewBeepEnabled(payload.reviewBeepEnabled);
             setTimerSystemMode(payload.mode);
             setSettingsOpen(false);
           }}

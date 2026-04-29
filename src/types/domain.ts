@@ -59,6 +59,7 @@ export interface StudyCircle {
 export interface ReviewFront {
   id: string;
   title: string;
+  detail?: string;
   color: TopicColor;
   checks: {
     weekly: boolean[];
