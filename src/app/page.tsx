@@ -954,6 +954,7 @@ export default function Home() {
   const [collapsedBlocks, setCollapsedBlocks] = useState<Record<string, boolean>>({});
   const [reviewSearch, setReviewSearch] = useState("");
   const [focusedReviewItem, setFocusedReviewItem] = useState<string | null>(null);
+  const [pendingBlockDeletion, setPendingBlockDeletion] = useState<{ id: string; name: string } | null>(null);
   const [topicEditor, setTopicEditor] = useState<{
     blockId: string;
     frontId: string;
@@ -1778,7 +1779,7 @@ export default function Home() {
                                         </svg>
                                       </button>
                                       <button
-                                        onClick={() => removeReviewBlock(block.id)}
+                                        onClick={() => setPendingBlockDeletion({ id: block.id, name: block.name })}
                                         className="h-6 w-6 flex items-center justify-center rounded-full"
                                         style={{ ...glassGhost, color: "rgba(255,100,100,0.7)" }}
                                         title="Delete block"
@@ -2148,6 +2149,48 @@ export default function Home() {
             setSettingsOpen(false);
           }}
         />
+      )}
+
+      {pendingBlockDeletion && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center px-4">
+          <div
+            className="absolute inset-0 bg-black/65"
+            onClick={() => setPendingBlockDeletion(null)}
+            aria-hidden
+          />
+          <div
+            className="relative w-full max-w-[420px] rounded-3xl p-5"
+            style={{ ...glassPill, background: "rgba(10,10,18,0.9)" }}
+          >
+            <h3 className="text-base font-semibold" style={{ color: "rgba(255,255,255,0.9)" }}>
+              Excluir bloco?
+            </h3>
+            <p className="mt-2 text-sm" style={{ color: "rgba(255,255,255,0.68)" }}>
+              O bloco "{pendingBlockDeletion.name}" sera removido. Esta acao nao pode ser desfeita.
+            </p>
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setPendingBlockDeletion(null)}
+                className="h-10 rounded-full px-4 text-xs"
+                style={{ ...glassGhost, color: "rgba(255,255,255,0.7)" }}
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  removeReviewBlock(pendingBlockDeletion.id);
+                  setPendingBlockDeletion(null);
+                }}
+                className="h-10 rounded-full px-4 text-xs"
+                style={{ ...glassGhost, color: "rgba(255,120,120,0.95)", borderColor: "rgba(255,120,120,0.45)" }}
+              >
+                Excluir
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
     </main>
